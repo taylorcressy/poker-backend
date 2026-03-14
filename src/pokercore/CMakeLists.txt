@@ -10,6 +10,7 @@ SET(POKERCORE_SRC
         src/poker_deck.cpp
         src/poker_game.cpp
         src/poker_validator.cpp
+        src/crypto.cpp
 )
 
 add_library(pokercore STATIC

@@ -37,5 +37,13 @@ target_link_libraries(uSockets PRIVATE OpenSSL::SSL OpenSSL::Crypto ZLIB::ZLIB)
 
 target_link_libraries(uWebSockets INTERFACE uSockets)
 
+## jwt-cpp
+FetchContent_Declare(
+        jwt-cpp
+        GIT_REPOSITORY https://github.com/Thalhammer/jwt-cpp.git
+        GIT_TAG v0.7.2
+)
+set(JWT_BUILD_EXAMPLES OFF CACHE BOOL "disable building examples" FORCE)
+FetchContent_MakeAvailable(jwt-cpp)
 
 add_subdirectory(src)

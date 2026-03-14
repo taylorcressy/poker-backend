@@ -4,6 +4,7 @@
 
 #pragma once
 #include <optional>
+#include <memory>
 #include <unordered_set>
 #include <vector>
 #include <string>
@@ -11,6 +12,10 @@
 #include <unordered_map>
 
 namespace pokergame::core {
+    // Helpers
+    std::string generate_unique_random_secret(size_t secret_length);
+    std::vector<std::string> split_string(const std::string& str, char delimiter);
+
     template<class T>
     constexpr std::underlying_type_t<T> to_underlying(T t) noexcept {
         static_assert(std::is_enum_v<T>);
@@ -136,7 +141,7 @@ namespace pokergame::core {
     struct PokerConfiguration {
         size_t number_of_seats;
         unsigned long ante;
-        unsigned long minimum_number_of_chips_to_start;
+        unsigned long chips_when_seated;
     };
 
     struct Pot {
@@ -161,11 +166,13 @@ namespace pokergame::core {
 
     class PokerGame {
     public:
-        PokerGame(PokerConfiguration poker_configuration);
+        explicit PokerGame(const PokerConfiguration& poker_configuration);
 
         ~PokerGame() = default;
 
-        bool seatPlayer(const std::string &name, long chips, short seat_index);
+
+
+        bool seatPlayer(const std::string &name, size_t seat_index);
 
         bool start();
 
@@ -211,8 +218,18 @@ namespace pokergame::core {
         bool canGameStart();
 
         void resetTableStateForNewRound();
+    };
 
-        // TODO: Remove / move
-        void runTests();
+    // TODO: Determine when games are completed and remove them from the game map
+    // TODO: Handle server restart
+    class PokerLobby {
+    public:
+        PokerLobby();
+        ~PokerLobby() = default;
+
+        std::string createGame(const PokerConfiguration& poker_configuration);
+        bool seatPlayer(const std::string& game_id, const std::string& player_name, size_t seat_index);
+    private:
+        std::unordered_map<std::string, std::unique_ptr<PokerGame>> games; // Game ID to Game instance
     };
 }
