@@ -1,3 +1,3 @@
-
 add_subdirectory(pokercore)
+add_subdirectory(pokernetwork)
 add_subdirectory(pokergame)

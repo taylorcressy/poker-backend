@@ -3,14 +3,14 @@
 //
 
 #pragma once
-#include <atomic>
 #include <optional>
 #include <unordered_set>
 #include <vector>
 #include <string>
 #include <type_traits>
+#include <unordered_map>
 
-namespace pokergame {
+namespace pokergame::core {
     template<class T>
     constexpr std::underlying_type_t<T> to_underlying(T t) noexcept {
         static_assert(std::is_enum_v<T>);
@@ -198,7 +198,7 @@ namespace pokergame {
         std::optional<bet_t> takeBet(size_t player, BetType type, std::optional<bet_t> amount);
         void setNextStreetOrFinishRound(std::optional<GameState> next_street);
 
-        void processBetsOnRoundConclusion(std::vector<std::pair<size_t, bet_t> > &bets);
+        void processBetsOnRoundConclusion(std::unordered_map<size_t, bet_t> &bet_map);
 
         void executeNextStateTransition();
         void handleInit();

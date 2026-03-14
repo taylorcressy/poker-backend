@@ -10,4 +10,5 @@ target_link_libraries(
         pokergame
         PRIVATE
         pokercore
+        pokernetwork
 )

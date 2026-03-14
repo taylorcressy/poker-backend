@@ -1,14 +1,14 @@
+#include "poker_core.h"
 #include "detail/poker_validator.h"
 
 #include <algorithm>
-#include <limits>
 #include <optional>
 #include <ranges>
 #include <unordered_set>
 #include <unordered_map>
 #include <map>
 
-namespace pokergame::detail {
+namespace pokergame::core {
     /////
     // Helpers
     ////

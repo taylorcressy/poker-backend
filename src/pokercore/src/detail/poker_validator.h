@@ -7,7 +7,7 @@
 #include "poker_core.h"
 
 
-namespace pokergame::detail {
+namespace pokergame::core {
     enum class Hand {
         HighCard,
         OnePair,

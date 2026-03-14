@@ -9,7 +9,7 @@
 
 #include "poker_core.h"
 
-namespace pokergame {
+namespace pokergame::core {
     static constexpr Rank allRanks[] = {
         Rank::Two, Rank::Three, Rank::Four, Rank::Five, Rank::Six, Rank::Seven, Rank::Eight, Rank::Nine, Rank::Ten,
         Rank::Jack, Rank::Queen, Rank::King, Rank::Ace

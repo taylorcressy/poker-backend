@@ -7,7 +7,8 @@ SET(POKERCORE_PRIVATE_HEADERS
 )
 
 SET(POKERCORE_SRC
-        src/poker_deck.cpp src/poker_game.cpp
+        src/poker_deck.cpp
+        src/poker_game.cpp
         src/poker_validator.cpp
 )
 
@@ -22,5 +23,5 @@ target_include_directories(pokercore
         include
         PRIVATE
         src
-        src/include
+        src/detail
 )
