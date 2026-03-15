@@ -1,10 +1,9 @@
-SET(EXEC_SRC
-    main.cpp
+add_executable(pokergame main.cpp)
+
+target_include_directories(pokergame
+    PRIVATE
+        ${CMAKE_SOURCE_DIR}/src
 )
-
-
-
-add_executable(pokergame ${EXEC_SRC})
 
 target_link_libraries(
         pokergame

@@ -1,11 +1,10 @@
-
-#include "poker_core.h"
+#pragma once
 
 #include <random>
+#include <string>
 
-
-namespace pokergame::core {
-    std::string generate_unique_random_secret(const size_t secret_length) {
+namespace utils::crypto {
+    inline std::string generate_unique_random_secret(const size_t secret_length) {
         const std::string charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
         std::random_device rd;
         std::mt19937 generator(rd());

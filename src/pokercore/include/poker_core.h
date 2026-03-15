@@ -12,10 +12,6 @@
 #include <unordered_map>
 
 namespace pokergame::core {
-    // Helpers
-    std::string generate_unique_random_secret(size_t secret_length);
-    std::vector<std::string> split_string(const std::string& str, char delimiter);
-
     template<class T>
     constexpr std::underlying_type_t<T> to_underlying(T t) noexcept {
         static_assert(std::is_enum_v<T>);
@@ -220,16 +216,28 @@ namespace pokergame::core {
         void resetTableStateForNewRound();
     };
 
+    struct PokerRoom {
+        PokerGame game;
+        std::string owner;
+        std::unordered_set<std::string> users;
+    };
+
     // TODO: Determine when games are completed and remove them from the game map
     // TODO: Handle server restart
     class PokerLobby {
     public:
+        static PokerLobby& instance() {
+            static PokerLobby lobby;
+            return lobby;
+        }
+
+        std::string createRoom(const PokerConfiguration& poker_configuration, const std::string& owner);
+        bool joinRoom(const std::string& room_id, const std::string& player_name);
+        bool leaveRoom(const std::string& room_id, const std::string& player_name);
+    private:
         PokerLobby();
         ~PokerLobby() = default;
 
-        std::string createGame(const PokerConfiguration& poker_configuration);
-        bool seatPlayer(const std::string& game_id, const std::string& player_name, size_t seat_index);
-    private:
-        std::unordered_map<std::string, std::unique_ptr<PokerGame>> games; // Game ID to Game instance
+        std::unordered_map<std::string, std::unique_ptr<PokerRoom>> rooms; // Room ID to Room instance
     };
 }

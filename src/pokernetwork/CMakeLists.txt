@@ -24,7 +24,7 @@ target_include_directories(pokernetwork
         include
         PRIVATE
         src
-        src/detail
+        ${CMAKE_SOURCE_DIR}/src
 
         ${uwebsockets_SOURCE_DIR}/src
         ${uwebsockets_SOURCE_DIR}/uSockets/src
@@ -32,6 +32,7 @@ target_include_directories(pokernetwork
 
 target_link_libraries(pokernetwork
         PRIVATE
+        pokercore
         uWebSockets
         jwt-cpp::jwt-cpp
 )

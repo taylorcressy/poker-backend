@@ -6,19 +6,26 @@
 namespace pokergame::network::http {
     class HttpRoutes {
     public:
-        static HttpRoutes& instance() {
+        static HttpRoutes &instance() {
             static HttpRoutes http_routes;
             return http_routes;
         }
 
-        void createGame(uWS::HttpResponse<false>*, uWS::HttpRequest*);
+        // Creates a room and a game.
+        void createGame(uWS::HttpResponse<false> *, uWS::HttpRequest *);
+
+        void joinRoom(uWS::HttpResponse<false> *, uWS::HttpRequest *);
+
+        void leaveRoom(uWS::HttpResponse<false> *, uWS::HttpRequest *);
+
 
         ~HttpRoutes() = default;
+
     private:
         HttpRoutes() = default;
     };
 
-    using RoutingHandler = void (HttpRoutes::*)(uWS::HttpResponse<false>*, uWS::HttpRequest*);
+    using RoutingHandler = void (HttpRoutes::*)(uWS::HttpResponse<false> *, uWS::HttpRequest *);
 
     struct RouteDefinition {
         std::string method;
@@ -26,9 +33,13 @@ namespace pokergame::network::http {
         RoutingHandler handler;
     };
 
-    const std::string base_path = "/v1/path";
+    const std::string base_path = "/v1/poker";
 
-    constexpr std::array<RouteDefinition, 1> route_definitions = {
-       {"POST", "/createGame", &HttpRoutes::createGame}
-   };
+    constexpr std::array<RouteDefinition, 3> route_definitions = {
+        {
+            {"POST", "/createGame", &HttpRoutes::createGame},
+            {"POST", "/joinRoom", &HttpRoutes::joinRoom},
+            {"POST", "/leaveRoom", &HttpRoutes::leaveRoom},
+        }
+    };
 };

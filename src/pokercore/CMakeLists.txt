@@ -10,7 +10,7 @@ SET(POKERCORE_SRC
         src/poker_deck.cpp
         src/poker_game.cpp
         src/poker_validator.cpp
-        src/crypto.cpp
+        src/poker_lobby.cpp
 )
 
 add_library(pokercore STATIC
@@ -24,5 +24,5 @@ target_include_directories(pokercore
         include
         PRIVATE
         src
-        src/detail
+        ${CMAKE_SOURCE_DIR}/src
 )

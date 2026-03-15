@@ -15,6 +15,7 @@ add_executable(
 
 target_include_directories(pokertests
         PRIVATE
+        src/detail
         ${CMAKE_SOURCE_DIR}/src/pokernetwork/src/detail
 )
 

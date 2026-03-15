@@ -4,8 +4,10 @@
 #include <random>
 #include <iostream>
 
+#include "utils/crypto.h"
 #include "poker_network.h"
 #include "poker_core.h"
+#include "utils/string_utils.h"
 
 int load_env(const std::string& path) {
     std::ifstream in_file(path);
@@ -23,7 +25,7 @@ int load_env(const std::string& path) {
             return errno;
         }
 
-        out_file << "JWT_SECRET=" << pokergame::core::generate_unique_random_secret(64) << std::endl;
+        out_file << "JWT_SECRET=" << utils::crypto::generate_unique_random_secret(64) << std::endl;
         out_file.close();
 
         in_file.clear();
@@ -41,7 +43,7 @@ int load_env(const std::string& path) {
     std::string line;
     size_t line_num = 1;
     while (std::getline(in_file, line)) {
-        auto tokens = pokergame::core::split_string(line, '=');
+        auto tokens = utils::string::split_string(line, '=');
 
         if (tokens.size() != 2) {
             std::cerr << "Failed to parse env file on line " << line_num << std::endl;

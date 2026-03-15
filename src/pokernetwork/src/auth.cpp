@@ -1,5 +1,5 @@
 
-#include "auth.h"
+#include "detail/auth.h"
 
 #include <jwt-cpp/jwt.h>
 
