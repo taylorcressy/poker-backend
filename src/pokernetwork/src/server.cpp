@@ -9,6 +9,7 @@
 #include <functional>
 #include <iostream>
 
+#include "detail/auth.h"
 
 namespace pokergame::network {
 
@@ -30,14 +31,22 @@ namespace pokergame::network {
         }
 
         // TODO: WS Handling
-        app.ws<std::string>("/*", {
-            .open = [](auto *ws) {
+        app.ws<auth::AuthContext>("/*", {
+            .upgrade = [](uWS::HttpResponse<false>* res, uWS::HttpRequest* req, us_socket_context_t* context) {
+                http::HttpRoutes::instance().upgradeToWs(res, req, context);
+            },
+            .open = [](uWS::WebSocket<false, true, auth::AuthContext> *ws) {
 
             },
-            .message = [](auto *ws, std::string_view message, uWS::OpCode op_code) {
+            .message = [](uWS::WebSocket<false, true, auth::AuthContext> *ws, std::string_view message, uWS::OpCode op_code) {
+
+            },
+            .close = [](uWS::WebSocket<false, true, auth::AuthContext> *ws, int code, std::string_view message) {
 
             }
         });
+
+
 
         app.listen(port, [](const auto *listen_socket) {
             if (listen_socket) {

@@ -4,6 +4,7 @@ SET(POKER_NETWORK_INCLUDE
 
 SET(POKER_NETWORK_PRIVATE_HEADERS
         src/detail/http_routes.h
+        src/detail/ws_routes.h
         src/detail/auth.h
 )
 
@@ -11,6 +12,7 @@ SET(POKER_NETWORK_SRC
         src/http_routes.cpp
         src/server.cpp
         src/auth.cpp
+        src/ws_routes.cpp
 )
 
 add_library(pokernetwork STATIC

@@ -3,6 +3,8 @@
 
 #include <jwt-cpp/jwt.h>
 
+#include "utils/string_utils.h"
+
 namespace pokergame::network::auth {
     JWTHandler::JWTHandler() :
         verifier(jwt::verify()
@@ -35,5 +37,41 @@ namespace pokergame::network::auth {
         }
 
         return {true, extracted};
+    }
+
+    std::optional<AuthContext> JWTHandler::extractAuthContextFromCookie(const std::string_view &cookie_header) {
+        const std::vector<std::string_view> cookies = utils::string::split_string_view(cookie_header, ';');
+        if (cookies.empty()) {
+            return std::nullopt;
+        }
+
+        for (const auto &cookie: cookies) {
+            const auto trimmed = utils::string::trim_string_view(cookie);
+            if (trimmed.size() > 0) {
+                const auto split_cookie = utils::string::split_string_view(trimmed, '=');
+                if (split_cookie.size() != 2) {
+                    continue;
+                }
+
+                if (split_cookie[0] == "jwt") {
+                    const auto extracted = auth::JWTHandler::instance()
+                            .decodeAndVerify(
+                                std::string(split_cookie[1]),
+                                {"room_id", "username"}
+                            );
+
+                    if (!extracted.succeeded || !extracted.extracted.has_value()) {
+                        std::cerr << "Received invalid jwt." << std::endl;
+                        return std::nullopt;
+                    }
+
+                    auto claim_map = *extracted.extracted;
+                    return auth::AuthContext{ claim_map["room_id"], claim_map["username"] };
+                }
+            }
+        }
+
+        std::cout << "Failed to extract jwt from cookie header." << std::endl;
+        return std::nullopt;
     }
 }

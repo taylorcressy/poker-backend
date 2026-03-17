@@ -18,6 +18,7 @@ namespace pokergame::network::http {
 
         void leaveRoom(uWS::HttpResponse<false> *, uWS::HttpRequest *);
 
+        void upgradeToWs(uWS::HttpResponse<false> *, uWS::HttpRequest *, us_socket_context_t*);
 
         ~HttpRoutes() = default;
 

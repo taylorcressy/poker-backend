@@ -9,6 +9,11 @@ namespace pokergame::network::auth {
         std::optional<std::unordered_map<std::string, std::string>> extracted;
     };
 
+    struct AuthContext {
+        std::string room_id;
+        std::string username;
+    };
+
     class JWTHandler {
     public:
         ~JWTHandler() = default;
@@ -19,7 +24,7 @@ namespace pokergame::network::auth {
 
         [[nodiscard]] std::string generateJwt(const std::unordered_map<std::string, std::string>& claims) const;
         [[nodiscard]] JWTExtract decodeAndVerify(const std::string& token, const std::vector<std::string>& claims) const;
-
+        [[nodiscard]] std::optional<AuthContext> extractAuthContextFromCookie(const std::string_view &cookie_header);
     private:
         JWTHandler();
         jwt::verifier<jwt::default_clock, jwt::traits::kazuho_picojson> verifier;

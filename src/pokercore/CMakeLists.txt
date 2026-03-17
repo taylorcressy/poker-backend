@@ -1,5 +1,6 @@
 SET(POKERCORE_INCLUDE
         include/poker_core.h
+        include/poker_notifications.h
 )
 
 SET(POKERCORE_PRIVATE_HEADERS
@@ -25,4 +26,9 @@ target_include_directories(pokercore
         PRIVATE
         src
         ${CMAKE_SOURCE_DIR}/src
+)
+
+target_link_libraries(pokercore
+    INTERFACE
+        nlohmann_json::nlohmann_json
 )
