@@ -8,200 +8,55 @@
 #include <unordered_set>
 #include <vector>
 #include <string>
-#include <type_traits>
 #include <unordered_map>
 
+#include "poker_types.h"
+#include "notifications.h"
+
 namespace pokergame::core {
-    template<class T>
-    constexpr std::underlying_type_t<T> to_underlying(T t) noexcept {
-        static_assert(std::is_enum_v<T>);
-        return static_cast<std::underlying_type_t<T>>(t);
-    }
-
-    enum class Rank {
-        Two,
-        Three,
-        Four,
-        Five,
-        Six,
-        Seven,
-        Eight,
-        Nine,
-        Ten,
-        Jack,
-        Queen,
-        King,
-        Ace
-    };
-
-    constexpr int rankIndex(Rank r) noexcept {
-        return to_underlying(r);
-    }
-
-
-    struct RankSorterDescending {
-        bool operator()(const Rank &a, const Rank &b) const {
-            return rankIndex(a) > rankIndex(b);
-        }
-    };
-
-    std::string_view rankToString(Rank r);
-
-    enum class Suit {
-        Clubs,
-        Diamonds,
-        Hearts,
-        Spades
-    };
-
-    constexpr int suitIndex(Suit s) noexcept {
-        return to_underlying(s);
-    }
-
-    std::string_view suitToString(Suit s);
-
-    struct Card {
-        Rank rank;
-        Suit suit;
-
-        bool operator==(const Card &other) const {
-            return other.rank == this->rank && other.suit == this->suit;
-        }
-    };
-
-    std::string cardToString(Card s);
-
-    struct CardHasher {
-        std::size_t operator()(const Card &card) const noexcept {
-            return suitIndex(card.suit) << 2 | rankIndex(card.rank);
-        }
-    };
-
-    struct CardGreater {
-        bool operator()(const Card &a, const Card &b) const {
-            return rankIndex(a.rank) > rankIndex(b.rank);
-        }
-    };
-
-    class Deck {
-    public:
-        Deck();
-
-        ~Deck() = default;
-
-        /**
-         * Shuffle and resets the deck pointer
-         */
-        void shuffle();
-
-        Card drawCard();
-
-        std::string deckAsString();
-
-        void printDeck();
-
-        static constexpr int MaxCards = 52;
-
-    private:
-        std::vector<Card> cards;
-        int currentCard;
-    };
-
-    enum class SeatState {
-        Empty,
-        InHand,
-        Folded,
-        AllIn,
-    };
-
-    typedef unsigned long bet_t;
-
-    struct Seat {
-        std::string name;
-        std::vector<Card> hand;
-        bet_t chips;
-        SeatState seat_state;
-    };
-
-    enum class GameState {
-        NotStarted,
-        Init,
-        PreFlop,
-        Flop,
-        Turn,
-        River,
-        Showdown,
-        RoundComplete
-    };
-
-    struct PokerConfiguration {
-        size_t number_of_seats;
-        unsigned long ante;
-        unsigned long chips_when_seated;
-    };
-
-    struct Pot {
-        bet_t amount = 0;
-        std::unordered_set<size_t> participants;
-    };
-
-    enum class BetType {
-        Check,
-        SmallBlind,
-        BigBlind,
-        Fold,
-        Call,
-        Bet,
-        Raise
-    };
-
-    struct PlayerAction {
-        BetType type;
-        std::optional<bet_t> amount;
-    };
 
     class PokerGame {
     public:
-        explicit PokerGame(const PokerConfiguration& poker_configuration);
+        explicit PokerGame(const types::PokerConfiguration& poker_configuration);
 
         ~PokerGame() = default;
-
-
 
         bool seatPlayer(const std::string &name, size_t seat_index);
 
         bool start();
 
-    private:
-        const PokerConfiguration config;
+        [[nodiscard]] notifications::GameStateNotification getGameState() const;
 
-        Deck deck;
-        std::vector<Card> community_cards;
-        std::vector<Seat> seats;
+    private:
+        const types::PokerConfiguration config;
+
+        types::Deck deck;
+        std::vector<types::Card> community_cards;
+        std::vector<types::Seat> seats;
         std::vector<size_t> seated_players;
-        GameState state;
+        types::GameState state;
         size_t dealer;
 
         // Poker rounds can have multiple pots if someone goes all in.
         // So we maintain the total running value of the pots (pots).
         // max_pot_sizes tell us how much a player needs to bet for each particular
         // pot to be reconciled.
-        std::vector<Pot> pots;
-        std::vector<bet_t> max_pot_sizes;
+        std::vector<types::Pot> pots;
+        std::vector<types::bet_t> max_pot_sizes;
 
 
         std::optional<size_t> nextBetter(size_t other_player);
 
         void handleBettingRound();
 
-        PlayerAction getPlayerAction(size_t player,
-                                     const std::unordered_set<BetType> &allowed_actions,
-                                     bet_t amount_owed);
+        types::PlayerAction getPlayerAction(size_t player,
+                                     const std::unordered_set<types::BetType> &allowed_actions,
+                                     types::bet_t amount_owed);
 
-        std::optional<bet_t> takeBet(size_t player, BetType type, std::optional<bet_t> amount);
-        void setNextStreetOrFinishRound(std::optional<GameState> next_street);
+        std::optional<types::bet_t> takeBet(size_t player, types::BetType type, std::optional<types::bet_t> amount);
+        void setNextStreetOrFinishRound(std::optional<types::GameState> next_street);
 
-        void processBetsOnRoundConclusion(std::unordered_map<size_t, bet_t> &bet_map);
+        void processBetsOnRoundConclusion(std::unordered_map<size_t, types::bet_t> &bet_map);
 
         void executeNextStateTransition();
         void handleInit();
@@ -220,24 +75,28 @@ namespace pokergame::core {
         PokerGame game;
         std::string owner;
         std::unordered_set<std::string> users;
+        // Add notifier here?
     };
 
     // TODO: Determine when games are completed and remove them from the game map
     // TODO: Handle server restart
     class PokerLobby {
     public:
-        static PokerLobby& instance() {
-            static PokerLobby lobby;
-            return lobby;
-        }
-
-        std::string createRoom(const PokerConfiguration& poker_configuration, const std::string& owner);
-        bool joinRoom(const std::string& room_id, const std::string& player_name);
-        bool leaveRoom(const std::string& room_id, const std::string& player_name);
-    private:
-        PokerLobby();
+        explicit PokerLobby(std::string lobby_id): lobby_id(std::move(lobby_id)) {}
         ~PokerLobby() = default;
 
-        std::unordered_map<std::string, std::unique_ptr<PokerRoom>> rooms; // Room ID to Room instance
+        std::string lobby_id;
+
+        std::string createRoom(const types::PokerConfiguration& poker_configuration, const std::string& owner);
+
+        bool joinRoom(const std::string& room_id, const std::string& player_name);
+
+        bool leaveRoom(const std::string& room_id, const std::string& player_name);
+
+        std::optional<notifications::GameStateNotification> getGameState(const std::string& room_id) const;
+
+    private:
+        std::unordered_map<std::string, std::shared_ptr<PokerRoom>> rooms; // Room ID to Room instance
+
     };
 }

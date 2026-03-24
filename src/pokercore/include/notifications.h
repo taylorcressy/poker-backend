@@ -2,39 +2,43 @@
 
 #include <nlohmann/json.hpp>
 #include <string>
+#include "poker_types.h"
 
 namespace pokergame::core::notifications {
+
     struct Notification {
         std::string type;
 
         explicit Notification(std::string t): type(std::move(t)) {}
         virtual ~Notification() = default;
 
-        virtual void toJson(nlohmann::json& j) const {
-            j["type"] = type;
-        }
+        virtual void toJson(nlohmann::json& j) const;
 
-        std::string dump() const {
-            nlohmann::json j;
-            toJson(j);
-            return j.dump();
-        }
+        std::string dump() const;
     };
 
     struct BettingAction : Notification {
         std::string action;
 
         BettingAction(): Notification("BettingAction"), action("") {}
-        BettingAction(std::string a): Notification("BettingAction"), action(std::move(a)) {}
+        explicit BettingAction(std::string a): Notification("BettingAction"), action(std::move(a)) {}
 
-        void toJson(nlohmann::json &j) const override {
-            Notification::toJson(j);
-            j["action"] = action;
-        }
+        void toJson(nlohmann::json &j) const override;
 
         NLOHMANN_DEFINE_TYPE_INTRUSIVE(BettingAction, type, action);
     };
 
+
+    struct GameStateNotification : Notification {
+
+        types::GameState round;
+
+        explicit GameStateNotification(types::GameState round): Notification("GameState"), round(std::move(round)) {}
+
+        void toJson(nlohmann::json &j) const override;
+
+        NLOHMANN_DEFINE_TYPE_INTRUSIVE(GameStateNotification, round);
+    };
 
     std::optional<std::unique_ptr<Notification>> messageToNotification(const std::string&);
 
