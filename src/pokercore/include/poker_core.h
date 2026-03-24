@@ -17,7 +17,7 @@ namespace pokergame::core {
 
     class PokerGame {
     public:
-        explicit PokerGame(const types::PokerConfiguration& poker_configuration);
+        explicit PokerGame(const types::PokerConfiguration& poker_configuration, std::shared_ptr<notifications::INotifier>, std::string_view);
 
         ~PokerGame() = default;
 
@@ -25,10 +25,10 @@ namespace pokergame::core {
 
         bool start();
 
-        [[nodiscard]] notifications::GameStateNotification getGameState() const;
-
     private:
         const types::PokerConfiguration config;
+        const std::shared_ptr<notifications::INotifier> notifier;
+        const std::string game_id;
 
         types::Deck deck;
         std::vector<types::Card> community_cards;
@@ -69,6 +69,8 @@ namespace pokergame::core {
         bool canGameStart();
 
         void resetTableStateForNewRound();
+
+        void publishGameState();
     };
 
     struct PokerRoom {
@@ -76,6 +78,11 @@ namespace pokergame::core {
         std::string owner;
         std::unordered_set<std::string> users;
         // Add notifier here?
+    };
+
+    struct LeaveRoomResult {
+        bool player_left;
+        bool last_player_left;
     };
 
     // TODO: Determine when games are completed and remove them from the game map
@@ -87,13 +94,11 @@ namespace pokergame::core {
 
         std::string lobby_id;
 
-        std::string createRoom(const types::PokerConfiguration& poker_configuration, const std::string& owner);
+        std::string createRoom(const types::PokerConfiguration& poker_configuration, const std::string& owner, std::shared_ptr<notifications::INotifier>);
 
         bool joinRoom(const std::string& room_id, const std::string& player_name);
 
-        bool leaveRoom(const std::string& room_id, const std::string& player_name);
-
-        std::optional<notifications::GameStateNotification> getGameState(const std::string& room_id) const;
+        LeaveRoomResult leaveRoom(const std::string& room_id, const std::string& player_name);
 
     private:
         std::unordered_map<std::string, std::shared_ptr<PokerRoom>> rooms; // Room ID to Room instance

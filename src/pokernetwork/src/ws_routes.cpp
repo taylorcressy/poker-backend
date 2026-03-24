@@ -1,5 +1,7 @@
 #include "detail/ws_routes.h"
 
+#include "App.h"
+
 #include <assert.h>
 
 namespace pokergame::network::ws {

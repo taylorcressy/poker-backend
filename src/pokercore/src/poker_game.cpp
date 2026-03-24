@@ -9,14 +9,27 @@
 namespace pokergame::core {
     using namespace types;
 
-    PokerGame::PokerGame(const PokerConfiguration& poker_configuration) : config{poker_configuration},
-                                                                         community_cards(0),
-                                                                         seats(poker_configuration.number_of_seats),
-                                                                         state{GameState::NotStarted},
-                                                                         dealer{static_cast<size_t>(-1)},
-                                                                         pots(0),
-                                                                         max_pot_sizes(0) {
+    PokerGame::PokerGame(const PokerConfiguration &poker_configuration,
+                         const std::shared_ptr<notifications::INotifier> notifier,
+                         std::string_view game_id) : config{poker_configuration},
+                                                     notifier{notifier},
+                                                     game_id{game_id},
+                                                     community_cards(0),
+                                                     seats(poker_configuration.number_of_seats),
+                                                     state{GameState::NotStarted},
+                                                     dealer{static_cast<size_t>(-1)},
+                                                     pots(0),
+                                                     max_pot_sizes(0) {
         this->community_cards.reserve(5);
+    }
+
+    void PokerGame::publishGameState() {
+        notifications::GameStateNotification notification{
+            this->state,
+            this->seats
+        };
+
+        this->notifier->sendMessageToTable(this->game_id, &notification);
     }
 
     bool PokerGame::seatPlayer(const std::string &name, const size_t seat_index) {
@@ -28,6 +41,7 @@ namespace pokergame::core {
         seat.seat_state = SeatState::InHand; // TODO: Need a better start state
         seat.name = name;
         seat.chips = this->config.chips_when_seated;
+        this->publishGameState();
         return true;
     }
 
@@ -114,7 +128,7 @@ namespace pokergame::core {
         };
 
         // Sort from lowest to highest bets
-        std::vector<std::pair<size_t, bet_t>> bets;
+        std::vector<std::pair<size_t, bet_t> > bets;
         bets.reserve(bet_map.size());
         for (const auto &[player_idx, bet]: bet_map) {
             bets.emplace_back(player_idx, bet);
@@ -182,12 +196,6 @@ namespace pokergame::core {
         }
         this->executeNextStateTransition(); // Handle round complete
         return true;
-    }
-
-    notifications::GameStateNotification PokerGame::getGameState() const {
-        return notifications::GameStateNotification{
-            this->state
-        };
     }
 
     void PokerGame::executeNextStateTransition() {
@@ -322,10 +330,10 @@ namespace pokergame::core {
 
         // Default production behaviour: check > call > bet > raise > fold
         (void) player;
-        if (allowed_actions.contains(BetType::Check))  return {BetType::Check, std::nullopt};
-        if (allowed_actions.contains(BetType::Call))   return {BetType::Call, amount_owed};
-        if (allowed_actions.contains(BetType::Bet))    return {BetType::Bet, 10};
-        if (allowed_actions.contains(BetType::Raise))  return {BetType::Raise, amount_owed + 10};
+        if (allowed_actions.contains(BetType::Check)) return {BetType::Check, std::nullopt};
+        if (allowed_actions.contains(BetType::Call)) return {BetType::Call, amount_owed};
+        if (allowed_actions.contains(BetType::Bet)) return {BetType::Bet, 10};
+        if (allowed_actions.contains(BetType::Raise)) return {BetType::Raise, amount_owed + 10};
         return {BetType::Fold, std::nullopt};
     }
 
@@ -447,7 +455,7 @@ namespace pokergame::core {
         auto in_hand = this->seats |
                        filter([](const auto &seat) { return seat.seat_state == SeatState::InHand; });
         auto all_in = this->seats |
-                        filter([](const auto &seat) { return seat.seat_state == SeatState::AllIn; });
+                      filter([](const auto &seat) { return seat.seat_state == SeatState::AllIn; });
 
         const size_t in_hand_count = distance(in_hand);
         const size_t all_in_count = distance(all_in);
@@ -473,7 +481,7 @@ namespace pokergame::core {
     }
 
     void PokerGame::handleFlop() {
-        for (size_t i= 0; i < 3; i++) {
+        for (size_t i = 0; i < 3; i++) {
             this->community_cards.push_back(this->deck.drawCard());
         }
         this->handleBettingRound();
@@ -497,19 +505,19 @@ namespace pokergame::core {
 
     // TODO: Do we need handle round complete?
     void PokerGame::handleShowdown() {
-
         // If streets have not occurred, add to community cards
         while (this->community_cards.size() < 5) {
             this->community_cards.emplace_back(this->deck.drawCard());
         }
 
-        auto player_left_of_player = [&](const size_t start_player, const std::unordered_set<size_t>& eligible_players) -> size_t {
+        auto player_left_of_player = [&](const size_t start_player,
+                                         const std::unordered_set<size_t> &eligible_players) -> size_t {
             size_t current_player = start_player + 1;
             if (current_player == this->seats.size()) {
                 current_player = 0;
             }
 
-            while(current_player != start_player) {
+            while (current_player != start_player) {
                 if (current_player >= this->seats.size()) {
                     current_player = 0;
                 }
@@ -524,9 +532,9 @@ namespace pokergame::core {
         };
 
         for (const auto &[amount, participants]: this->pots) {
-            std::unordered_map<size_t, std::vector<Card>> final_cards;
-            for (size_t i = 0; const auto& seat_idx: participants) {
-                const auto& seat = this->seats[seat_idx];
+            std::unordered_map<size_t, std::vector<Card> > final_cards;
+            for (size_t i = 0; const auto &seat_idx: participants) {
+                const auto &seat = this->seats[seat_idx];
                 std::vector<Card> seats_hand;
                 seats_hand.reserve(7);
                 seats_hand.insert(seats_hand.end(), this->community_cards.begin(), this->community_cards.end());
@@ -555,7 +563,8 @@ namespace pokergame::core {
                 }
 
                 for (size_t i = 0; i < leftover_chips; i++) {
-                    size_t closest_player = player_left_of_player(source_player, eligible_participants_for_extra_payout);
+                    size_t closest_player =
+                            player_left_of_player(source_player, eligible_participants_for_extra_payout);
                     payout_amounts[closest_player] += 1;
                     source_player = closest_player;
                 }
@@ -566,10 +575,8 @@ namespace pokergame::core {
                 this->seats[player_idx].chips += payout;
             }
         }
-
     }
 
     void PokerGame::handleRoundComplete() {
-
     }
 };

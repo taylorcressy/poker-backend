@@ -20,6 +20,14 @@ namespace pokergame::core::notifications {
     void GameStateNotification::toJson(nlohmann::json &j) const {
         Notification::toJson(j);
         j["round"] = types::gameStateToString(this->round);
+        j["seats"] = nlohmann::json::array();
+        for (const auto& seat: seats) {
+            j["seats"].push_back( {
+                {"chips", seat.chips},
+                {"name", seat.name},
+                {"seat_state", types::seatStateToString(seat.seat_state)}
+            } );
+        }
     }
 
     std::optional<std::unique_ptr<Notification> > messageToNotification(const std::string &raw_message) {

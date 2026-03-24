@@ -29,13 +29,14 @@ namespace pokergame::network::http {
     void HttpRoutes::createGame(uWS::HttpResponse<false> *res,
                                 uWS::HttpRequest *req,
                                 core::PokerLobby *lobby,
-                                auto game_created_callback) {
+                                std::shared_ptr<core::notifications::INotifier> notifier,
+                                std::function<void(std::string)> game_created_callback) {
         auto buffer = std::make_shared<std::string>();
-        res->onAborted([buffer] {
+        res->onAborted([] {
             onAborted();
         });
 
-        res->onData([buffer, res, lobby, game_created_callback](const std::string_view chunk, const bool is_last) {
+        res->onData([buffer, res, lobby, game_created_callback, notifier](const std::string_view chunk, const bool is_last) {
             buffer->append(chunk);
 
             try {
@@ -58,7 +59,7 @@ namespace pokergame::network::http {
 
 
                     const core::types::PokerConfiguration configuration{number_of_seats, ante, chips_when_seated};
-                    std::string room_id = lobby->createRoom(configuration, std::string(username));
+                    std::string room_id = lobby->createRoom(configuration, std::string(username), notifier);
 
                     const auto token = auth::JWTHandler::generateJwt({
                         {"lobby_id", lobby->lobby_id},
@@ -154,8 +155,7 @@ namespace pokergame::network::http {
         });
     }
 
-    void HttpRoutes::leaveRoom(uWS::HttpResponse<false> *res, uWS::HttpRequest *req, core::PokerLobby *lobby,
-                               uWS::Loop *loop) {
+    void HttpRoutes::leaveRoom(uWS::HttpResponse<false> *res, uWS::HttpRequest *req, core::PokerLobby *lobby, uWS::Loop *loop, std::function<void()> final_player_left_callback) {
         auto aborted = std::make_shared<bool>();
         res->onAborted([aborted] {
             *aborted = true;
@@ -171,13 +171,16 @@ namespace pokergame::network::http {
             return;
         }
 
-        loop->defer([current_loop, lobby, auth_context, res, aborted] {
-            auto left = lobby->leaveRoom(auth_context->room_id, auth_context->username);
-            current_loop->defer([res, left, aborted] {
+        loop->defer([final_player_left_callback, current_loop, lobby, auth_context, res, aborted] {
+            auto [player_left, last_player_left] = lobby->leaveRoom(auth_context->room_id, auth_context->username);
+            if (last_player_left) {
+                final_player_left_callback();
+            }
+            current_loop->defer([res, player_left, aborted] {
                 if (*aborted) {
                     return;
                 }
-                if (left) {
+                if (player_left) {
                     res->writeStatus("200 OK");
                     res->end();
                 } else {

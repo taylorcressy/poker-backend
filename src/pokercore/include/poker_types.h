@@ -131,6 +131,21 @@ namespace pokergame::core::types {
         AllIn,
     };
 
+    inline std::string_view seatStateToString(const SeatState &state) {
+        switch (state) {
+            case SeatState::AllIn:
+                return "All In";
+            case SeatState::Empty:
+                return "Empty";
+            case SeatState::Folded:
+                return "Folded";
+            case SeatState::InHand:
+                return "In Hand";
+            default:
+                return "Unknown";
+        }
+    }
+
     typedef unsigned long bet_t;
 
     struct Seat {

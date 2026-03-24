@@ -21,7 +21,7 @@ namespace pokergame::network {
 
     // Thread to lobby & loop mapping
     static std::unordered_map<size_t, LobbyLoop> lobby_loops;
-    static std::unordered_map<std::string, size_t> game_id_to_thread;
+    static std::unordered_map<std::string, size_t> room_id_to_thread;
     static std::shared_mutex map_mutex;
 
     void PokerServer::start() const {
@@ -53,8 +53,8 @@ namespace pokergame::network {
                     LobbyLoop *lobby_loop;
                     {
                         std::shared_lock map_guard(map_mutex);
-                        const auto it = game_id_to_thread.find(room_id);
-                        if (it == game_id_to_thread.end()) {
+                        const auto it = room_id_to_thread.find(room_id);
+                        if (it == room_id_to_thread.end()) {
                             res->writeStatus("404 Bad Request");
                             res->end();
                             return;
@@ -64,28 +64,31 @@ namespace pokergame::network {
                         lobby_loop = &lobby_loops.at(thread_id);
                     }
 
-                    callback(lobby_loop);
+                    callback(lobby_loop, room_id);
                 };
 
-                app.post("/v1/poker/createGame", [i](auto *res, auto *req) {
+                app.post("/v1/poker/createGame", [i, ws_routes](auto *res, auto *req) {
                     // TODO: It's theoretically possible to have conflicting room_ids across these threads. Need to fix.
                     std::lock_guard map_guard(map_mutex);
-                    http::HttpRoutes::instance().createGame(res, req, &lobby_loops.at(i).lobby, [i](std::string room_id) {
+                    http::HttpRoutes::instance().createGame(res, req, &lobby_loops.at(i).lobby, ws_routes, [i](std::string room_id) {
                         std::lock_guard internal_map_guard(map_mutex);
-                        game_id_to_thread.emplace(std::move(room_id), i);
+                        room_id_to_thread.emplace(std::move(room_id), i);
                     });
                 });
                 app.post("/v1/poker/room/:room_id/join", [get_lobby_loop_thread_safe](auto *res, auto *req) {
-                    get_lobby_loop_thread_safe(res, req, [res, req](LobbyLoop* lobby_loop) {
+                    get_lobby_loop_thread_safe(res, req, [res, req](LobbyLoop* lobby_loop, const std::string& room_id) {
                         if (lobby_loop != nullptr) {
                             http::HttpRoutes::instance().joinRoom(res, req, &lobby_loop->lobby, lobby_loop->loop);
                         }
                     });
                 });
                 app.post("/v1/poker/room/:room_id/leave", [get_lobby_loop_thread_safe](auto *res, auto *req) {
-                    get_lobby_loop_thread_safe(res, req, [res, req](LobbyLoop* lobby_loop) {
+                    get_lobby_loop_thread_safe(res, req, [res, req](LobbyLoop* lobby_loop, const std::string &room_id) {
                         if (lobby_loop != nullptr) {
-                            http::HttpRoutes::instance().leaveRoom(res, req, &lobby_loop->lobby, lobby_loop->loop);
+                            http::HttpRoutes::instance().leaveRoom(res, req, &lobby_loop->lobby, lobby_loop->loop, [room_id] {
+                                std::lock_guard internal_map_guard(map_mutex);
+                                room_id_to_thread.erase(room_id);
+                            });
                         }
                     });
                 });

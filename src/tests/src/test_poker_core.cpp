@@ -8,8 +8,21 @@ using namespace core::types;
 // ---------------------------------------------------------------------------
 // Infrastructure
 // ---------------------------------------------------------------------------
+class TestNotifier: public notifications::INotifier {
+public:
+    TestNotifier() = default;
 
-PokerTests::PokerTests() : g(PokerConfiguration{5, 5, 0}) {}
+    void sendMessageToPlayer(const std::string &room_id, const std::string &player_id, notifications::Notification *) override {
+
+    }
+
+    void sendMessageToTable(const std::string &room_id, notifications::Notification *) override {
+
+    }
+};
+
+
+PokerTests::PokerTests() : g(PokerConfiguration{5, 5, 0}, std::make_shared<TestNotifier>(TestNotifier{}), "1") {}
 
 void PokerTests::resetSeats(std::initializer_list<std::pair<SeatState, bet_t>> defs) {
     for (auto &seat : g.seats) {
