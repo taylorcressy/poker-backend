@@ -1,7 +1,8 @@
 #pragma once
 
 #include "App.h"
-#include <string>
+
+#include "poker_core.h"
 
 namespace pokergame::network::http {
     class HttpRoutes {
@@ -12,11 +13,11 @@ namespace pokergame::network::http {
         }
 
         // Creates a room and a game.
-        void createGame(uWS::HttpResponse<false> *, uWS::HttpRequest *);
+        void createGame(uWS::HttpResponse<false> *, uWS::HttpRequest *, core::PokerLobby*, auto game_created_callback);
 
-        void joinRoom(uWS::HttpResponse<false> *, uWS::HttpRequest *);
+        void joinRoom(uWS::HttpResponse<false> *, uWS::HttpRequest *, core::PokerLobby*, uWS::Loop*);
 
-        void leaveRoom(uWS::HttpResponse<false> *, uWS::HttpRequest *);
+        void leaveRoom(uWS::HttpResponse<false> *, uWS::HttpRequest *, core::PokerLobby*, uWS::Loop*);
 
         void upgradeToWs(uWS::HttpResponse<false> *, uWS::HttpRequest *, us_socket_context_t*);
 
@@ -24,23 +25,5 @@ namespace pokergame::network::http {
 
     private:
         HttpRoutes() = default;
-    };
-
-    using RoutingHandler = void (HttpRoutes::*)(uWS::HttpResponse<false> *, uWS::HttpRequest *);
-
-    struct RouteDefinition {
-        std::string method;
-        std::string route;
-        RoutingHandler handler;
-    };
-
-    const std::string base_path = "/v1/poker";
-
-    constexpr std::array<RouteDefinition, 3> route_definitions = {
-        {
-            {"POST", "/createGame", &HttpRoutes::createGame},
-            {"POST", "/joinRoom", &HttpRoutes::joinRoom},
-            {"POST", "/leaveRoom", &HttpRoutes::leaveRoom},
-        }
     };
 };

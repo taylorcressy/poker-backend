@@ -7,6 +7,8 @@
 #include <ranges>
 
 namespace pokergame::core {
+    using namespace types;
+
     PokerGame::PokerGame(const PokerConfiguration& poker_configuration) : config{poker_configuration},
                                                                          community_cards(0),
                                                                          seats(poker_configuration.number_of_seats),
@@ -171,15 +173,21 @@ namespace pokergame::core {
 
 
     bool PokerGame::start() {
-        // if (!this->canGameStart()) {
-        //     return false;
-        // }
-        // this->state = GameState::Init;
-        // while (this->state != GameState::RoundComplete) {
-        //     this->executeNextStateTransition();
-        // }
-        // this->executeNextStateTransition(); // Handle round complete
+        if (!this->canGameStart()) {
+            return false;
+        }
+        this->state = GameState::Init;
+        while (this->state != GameState::RoundComplete) {
+            this->executeNextStateTransition();
+        }
+        this->executeNextStateTransition(); // Handle round complete
         return true;
+    }
+
+    notifications::GameStateNotification PokerGame::getGameState() const {
+        return notifications::GameStateNotification{
+            this->state
+        };
     }
 
     void PokerGame::executeNextStateTransition() {

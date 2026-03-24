@@ -7,9 +7,11 @@
 #include <algorithm>
 #include <string>
 
+#include "poker_types.h"
 #include "poker_core.h"
 
-namespace pokergame::core {
+namespace pokergame::core::types {
+
     static constexpr Rank allRanks[] = {
         Rank::Two, Rank::Three, Rank::Four, Rank::Five, Rank::Six, Rank::Seven, Rank::Eight, Rank::Nine, Rank::Ten,
         Rank::Jack, Rank::Queen, Rank::King, Rank::Ace
@@ -29,25 +31,6 @@ namespace pokergame::core {
         }
     }
 
-    std::string_view rankToString(Rank r) {
-        switch (r) {
-            case Rank::Ace: return "Ace";
-            case Rank::King: return "King";
-            case Rank::Queen: return "Queen";
-            case Rank::Jack: return "Jack";
-            case Rank::Ten: return "Ten";
-            case Rank::Nine: return "Nine";
-            case Rank::Eight: return "Eight";
-            case Rank::Seven: return "Seven";
-            case Rank::Six: return "Six";
-            case Rank::Five: return "Five";
-            case Rank::Four: return "Four";
-            case Rank::Three: return "Three";
-            case Rank::Two: return "Two";
-            default: return "Unknown";
-        }
-    }
-
     Card Deck::drawCard() {
         return cards[currentCard++];
     }
@@ -61,21 +44,11 @@ namespace pokergame::core {
         std::ranges::shuffle(this->cards, gen);
     }
 
-    std::string_view suitToString(Suit s) {
-        switch (s) {
-            case Suit::Clubs: return "Clubs";
-            case Suit::Spades: return "Spades";
-            case Suit::Hearts: return "Hearts";
-            case Suit::Diamonds: return "Diamonds";
-            default: return "Unknown";
-        }
-    }
-
-    std::string cardToString(Card card) {
+    std::string cardToString(const Card card) {
         return std::string(rankToString(card.rank)) + " of " + std::string(suitToString(card.suit));
     }
 
-    std::string Deck::deckAsString() {
+    std::string Deck::deckAsString() const {
         std::string formatted_string;
         for (const auto card: this->cards) {
             formatted_string += cardToString(card);
@@ -83,7 +56,7 @@ namespace pokergame::core {
         return formatted_string;
     }
 
-    void Deck::printDeck() {
+    void Deck::printDeck() const {
         std::cout << this->deckAsString() << std::endl;
     }
 }

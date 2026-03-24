@@ -5,14 +5,14 @@ namespace pokergame::network {
 
     class PokerServer {
     public:
-        static PokerServer instance() {
+        static PokerServer& instance() {
             static PokerServer server;
             return server;
         }
 
         ~PokerServer() = default;
 
-        void start();
+        void start() const;
     private:
         PokerServer() = default;
     };

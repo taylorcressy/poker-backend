@@ -26,9 +26,9 @@ namespace pokergame::core {
     struct ValidationResult {
         bool valid;
         std::string hand_display_name;
-        std::optional<Card> high_card = std::nullopt;
-        std::optional<std::unordered_set<Card, CardHasher> > winners = std::nullopt;
-        std::optional<std::vector<Card> > kickers = std::nullopt;
+        std::optional<types::Card> high_card = std::nullopt;
+        std::optional<std::unordered_set<types::Card, types::CardHasher> > winners = std::nullopt;
+        std::optional<std::vector<types::Card> > kickers = std::nullopt;
     };
 
     class IValidator {
@@ -37,7 +37,7 @@ namespace pokergame::core {
 
         virtual ~IValidator() = default;
 
-        [[nodiscard]] virtual ValidationResult validate(const std::vector<Card> &hand) const = 0;
+        [[nodiscard]] virtual ValidationResult validate(const std::vector<types::Card> &hand) const = 0;
     };
 
     class RoyalFlushValidator : public IValidator {
@@ -47,7 +47,7 @@ namespace pokergame::core {
             return instance;
         }
 
-        [[nodiscard]] ValidationResult validate(const std::vector<Card> &hand) const override;
+        [[nodiscard]] ValidationResult validate(const std::vector<types::Card> &hand) const override;
 
     private:
         RoyalFlushValidator() = default;
@@ -60,7 +60,7 @@ namespace pokergame::core {
             return instance;
         }
 
-        [[nodiscard]] ValidationResult validate(const std::vector<Card> &hand) const override;
+        [[nodiscard]] ValidationResult validate(const std::vector<types::Card> &hand) const override;
 
     private:
         StraightFlushValidator() = default;
@@ -73,7 +73,7 @@ namespace pokergame::core {
             return instance;
         }
 
-        [[nodiscard]] ValidationResult validate(const std::vector<Card> &hand) const override;
+        [[nodiscard]] ValidationResult validate(const std::vector<types::Card> &hand) const override;
 
     private:
         FourOfAKindValidator() = default;
@@ -86,7 +86,7 @@ namespace pokergame::core {
             return instance;
         }
 
-        [[nodiscard]] ValidationResult validate(const std::vector<Card> &hand) const override;
+        [[nodiscard]] ValidationResult validate(const std::vector<types::Card> &hand) const override;
 
     private:
         FullHouseValidator() = default;
@@ -99,7 +99,7 @@ namespace pokergame::core {
             return instance;
         }
 
-        [[nodiscard]] ValidationResult validate(const std::vector<Card> &hand) const override;
+        [[nodiscard]] ValidationResult validate(const std::vector<types::Card> &hand) const override;
 
     private:
         FlushValidator() = default;
@@ -112,7 +112,7 @@ namespace pokergame::core {
             return instance;
         }
 
-        [[nodiscard]] ValidationResult validate(const std::vector<Card> &hand) const override;
+        [[nodiscard]] ValidationResult validate(const std::vector<types::Card> &hand) const override;
 
     private:
         StraightValidator() = default;
@@ -125,7 +125,7 @@ namespace pokergame::core {
             return instance;
         }
 
-        [[nodiscard]] ValidationResult validate(const std::vector<Card> &hand) const override;
+        [[nodiscard]] ValidationResult validate(const std::vector<types::Card> &hand) const override;
 
     private:
         ThreeOfAKindValidator() = default;
@@ -138,7 +138,7 @@ namespace pokergame::core {
             return instance;
         }
 
-        [[nodiscard]] ValidationResult validate(const std::vector<Card> &hand) const override;
+        [[nodiscard]] ValidationResult validate(const std::vector<types::Card> &hand) const override;
 
     private:
         TwoPairValidator() = default;
@@ -151,7 +151,7 @@ namespace pokergame::core {
             return instance;
         }
 
-        [[nodiscard]] ValidationResult validate(const std::vector<Card> &hand) const override;
+        [[nodiscard]] ValidationResult validate(const std::vector<types::Card> &hand) const override;
 
     private:
         OnePairValidator() = default;
@@ -164,7 +164,7 @@ namespace pokergame::core {
             return instance;
         }
 
-        [[nodiscard]] ValidationResult validate(const std::vector<Card> &hand) const override;
+        [[nodiscard]] ValidationResult validate(const std::vector<types::Card> &hand) const override;
 
     private:
         HighCardValidator() = default;
@@ -182,7 +182,7 @@ namespace pokergame::core {
             return validator;
         }
 
-        [[nodiscard]] static std::vector<ShowdownResult> evaluate(const std::unordered_map<size_t, std::vector<Card>> &hands) ;
+        [[nodiscard]] static std::vector<ShowdownResult> evaluate(const std::unordered_map<size_t, std::vector<types::Card>> &hands) ;
 
     private:
         ShowdownEvaluator() = default;

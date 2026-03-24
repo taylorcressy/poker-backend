@@ -10,6 +10,7 @@ namespace pokergame::network::auth {
     };
 
     struct AuthContext {
+        std::string lobby_id;
         std::string room_id;
         std::string username;
     };
@@ -22,10 +23,12 @@ namespace pokergame::network::auth {
             return handler;
         }
 
-        [[nodiscard]] std::string generateJwt(const std::unordered_map<std::string, std::string>& claims) const;
-        [[nodiscard]] JWTExtract decodeAndVerify(const std::string& token, const std::vector<std::string>& claims) const;
-        [[nodiscard]] std::optional<AuthContext> extractAuthContextFromCookie(const std::string_view &cookie_header);
+        [[nodiscard]] static std::string generateJwt(const std::unordered_map<std::string, std::string>& claims) ;
+        [[nodiscard]] static std::optional<AuthContext> extractAuthContextFromCookie(const std::string_view &cookie_header);
+
     private:
+        [[nodiscard]] JWTExtract decodeAndVerify(const std::string& token, const std::vector<std::string>& claims) const;
+
         JWTHandler();
         jwt::verifier<jwt::default_clock, jwt::traits::kazuho_picojson> verifier;
     };

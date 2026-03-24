@@ -12,7 +12,7 @@ namespace pokergame::network::auth {
             .allow_algorithm(jwt::algorithm::hs256{std::getenv("JWT_SECRET")})) {
     }
 
-    std::string JWTHandler::generateJwt(const std::unordered_map<std::string, std::string> &claims) const {
+    std::string JWTHandler::generateJwt(const std::unordered_map<std::string, std::string> &claims) {
         auto builder = jwt::create().set_type("JWS").set_issuer("auth0");
 
         for (const auto& [claim, claim_value]: claims) {
@@ -47,17 +47,17 @@ namespace pokergame::network::auth {
 
         for (const auto &cookie: cookies) {
             const auto trimmed = utils::string::trim_string_view(cookie);
-            if (trimmed.size() > 0) {
+            if (!trimmed.empty()) {
                 const auto split_cookie = utils::string::split_string_view(trimmed, '=');
                 if (split_cookie.size() != 2) {
                     continue;
                 }
 
                 if (split_cookie[0] == "jwt") {
-                    const auto extracted = auth::JWTHandler::instance()
+                    const auto extracted = instance()
                             .decodeAndVerify(
                                 std::string(split_cookie[1]),
-                                {"room_id", "username"}
+                                {"lobby_id", "room_id", "username"}
                             );
 
                     if (!extracted.succeeded || !extracted.extracted.has_value()) {
@@ -66,7 +66,7 @@ namespace pokergame::network::auth {
                     }
 
                     auto claim_map = *extracted.extracted;
-                    return auth::AuthContext{ claim_map["room_id"], claim_map["username"] };
+                    return AuthContext{ claim_map["lobby_id"], claim_map["room_id"], claim_map["username"] };
                 }
             }
         }

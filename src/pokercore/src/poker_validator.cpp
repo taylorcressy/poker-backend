@@ -8,7 +8,9 @@
 #include <unordered_map>
 #include <map>
 
+using namespace pokergame::core::types;
 namespace pokergame::core {
+
     /////
     // Helpers
     ////

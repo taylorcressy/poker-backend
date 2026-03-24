@@ -18,6 +18,7 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(uWebSockets)
 
 add_library(uWebSockets INTERFACE)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 target_include_directories(uWebSockets INTERFACE
         ${uwebsockets_SOURCE_DIR}/src

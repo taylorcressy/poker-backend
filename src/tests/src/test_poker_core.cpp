@@ -3,6 +3,7 @@
 namespace pokergame::tests {
 
 using namespace core;
+using namespace core::types;
 
 // ---------------------------------------------------------------------------
 // Infrastructure

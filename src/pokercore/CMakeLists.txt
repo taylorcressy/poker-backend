@@ -1,6 +1,7 @@
 SET(POKERCORE_INCLUDE
+        include/poker_types.h
         include/poker_core.h
-        include/poker_notifications.h
+        include/notifications.h
 )
 
 SET(POKERCORE_PRIVATE_HEADERS
@@ -12,6 +13,7 @@ SET(POKERCORE_SRC
         src/poker_game.cpp
         src/poker_validator.cpp
         src/poker_lobby.cpp
+        src/notifications.cpp
 )
 
 add_library(pokercore STATIC
@@ -29,6 +31,6 @@ target_include_directories(pokercore
 )
 
 target_link_libraries(pokercore
-    INTERFACE
+    PUBLIC
         nlohmann_json::nlohmann_json
 )

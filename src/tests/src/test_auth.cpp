@@ -2,7 +2,6 @@
 
 namespace pokergame::tests {
 
-using namespace network::auth;
 
 // ---------------------------------------------------------------------------
 // JWT tests
@@ -11,7 +10,7 @@ using namespace network::auth;
 void AuthTests::testJwt() {
     std::cout << "=== JWT tests ===\n";
 
-    auto &handler = JWTHandler::instance();
+    auto &handler = network::auth::JWTHandler::instance();
 
     // JWT1: round-trip – generate a token with multiple claims, decode and verify.
     {
