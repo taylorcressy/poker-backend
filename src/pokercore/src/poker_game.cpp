@@ -10,29 +10,29 @@ namespace pokergame::core {
     using namespace types;
 
     PokerGame::PokerGame(const PokerConfiguration &poker_configuration,
-                         const std::shared_ptr<notifications::INotifier> notifier,
-                         std::string_view game_id) : config{poker_configuration},
-                                                     notifier{notifier},
-                                                     game_id{game_id},
-                                                     community_cards(0),
-                                                     seats(poker_configuration.number_of_seats),
-                                                     state{GameState::NotStarted},
-                                                     dealer{static_cast<size_t>(-1)},
-                                                     pots(0),
-                                                     max_pot_sizes(0) {
+                         std::shared_ptr<events::INotifier> notifier,
+                         const std::string_view game_id) : config{poker_configuration},
+                                                           notifier{std::move(notifier)},
+                                                           game_id{game_id},
+                                                           seats(poker_configuration.number_of_seats) {
         this->community_cards.reserve(5);
     }
 
     void PokerGame::publishGameState() {
-        notifications::GameStateNotification notification{
+        events::GameStateNotification notification{
             this->state,
-            this->seats
+            this->seats,
+            std::nullopt
         };
 
         this->notifier->sendMessageToTable(this->game_id, &notification);
     }
 
     bool PokerGame::seatPlayer(const std::string &name, const size_t seat_index) {
+        if (this->username_to_seat.contains(name)) {
+            return false;
+        }
+
         auto &seat = this->seats[seat_index];
         if (seat.seat_state != SeatState::Empty) {
             return false;
@@ -41,6 +41,7 @@ namespace pokergame::core {
         seat.seat_state = SeatState::InHand; // TODO: Need a better start state
         seat.name = name;
         seat.chips = this->config.chips_when_seated;
+        this->username_to_seat[seat.name] = seat_index;
         this->publishGameState();
         return true;
     }
@@ -183,67 +184,110 @@ namespace pokergame::core {
                 this->max_pot_sizes.push_back(last_allocation);
             }
         }
-    }
 
-
-    bool PokerGame::start() {
-        if (!this->canGameStart()) {
-            return false;
-        }
-        this->state = GameState::Init;
-        while (this->state != GameState::RoundComplete) {
-            this->executeNextStateTransition();
-        }
-        this->executeNextStateTransition(); // Handle round complete
-        return true;
-    }
-
-    void PokerGame::executeNextStateTransition() {
+        // Next street
+        std::optional<GameState> next_street = std::nullopt;
         switch (this->state) {
-            case GameState::Init:
-                this->handleInit();
-                break;
             case GameState::PreFlop:
-                this->handlePreFlop();
+                next_street = GameState::Flop;
                 break;
             case GameState::Flop:
-                this->handleFlop();
+                next_street = GameState::Turn;
                 break;
             case GameState::Turn:
-                this->handleTurn();
-                break;
-            case GameState::River:
-                this->handleRiver();
-                break;
-            case GameState::Showdown:
-                this->handleShowdown();
-                break;
-            case GameState::RoundComplete:
-                this->handleRoundComplete();
-                break;
-            case GameState::NotStarted:
+                next_street = GameState::River;
                 break;
             default:
                 break;
         }
+        this->gotoNextStreetOrFinishRound(next_street);
+    }
+
+    void PokerGame::requestPlayerAction(const size_t player,
+                                        const std::unordered_set<BetType> &allowed_actions,
+                                        const bet_t amount_owed) {
+        events::BettingAction requested_action{allowed_actions, amount_owed};
+        this->state_before_requested_action = this->state;
+        this->await_action_from = player;
+        this->state = GameState::RequestingPlayerAction;
+
+        const auto user_timed_out = [this, player] {
+            // Calculate what BettingAction
+            const auto allowed = this->getAllowedActions();
+            BetType bet_type = BetType::Fold;
+            if (allowed.contains(BetType::Check)) {
+                bet_type = BetType::Check;
+            }
+            auto betting_event = events::BettingEvent{bet_type, std::nullopt};
+            auto player_ack = this->handlePlayerEvent(this->seats[player].name, &betting_event, false);
+            this->notifier->sendMessageToPlayer(this->game_id, this->seats[player].name, &player_ack);
+        };
+
+        this->notifier->sendMessageToPlayerWithTimeoutCallback(this->game_id,
+                                                               this->seats[player].name,
+                                                               &requested_action,
+                                                               this->config.time_to_response_in_seconds,
+                                                               user_timed_out
+        );
+    }
+
+    events::PlayerEventAcknowledgement PokerGame::handlePlayerEvent(const std::string& username,
+                                                                    events::PlayerEvent *player_event,
+                                                                    const bool system_initiated) {
+
+        switch (player_event->event_type) {
+            case events::PlayerEventType::START:
+                if (this->state != GameState::NotStarted) {
+                    return events::PlayerEventAcknowledgement{false, system_initiated, "Game already started"};
+                }
+                if (!this->canGameStart()) {
+                    return events::PlayerEventAcknowledgement{false, system_initiated, "Game can't start"};
+                }
+                // TODO: Verify event came from owner of game
+
+                this->handleInit();
+                return events::PlayerEventAcknowledgement{true, system_initiated, "Game Started"};
+            case events::PlayerEventType::BETTING_ACTION:
+                if (state != GameState::RequestingPlayerAction) {
+                    return events::PlayerEventAcknowledgement{false, system_initiated, "Not your turn"};
+                }
+                const auto iter = this->username_to_seat.find(username);
+                if (iter == this->username_to_seat.end()) {
+                    return events::PlayerEventAcknowledgement{false, system_initiated, "Player not found"};
+                }
+                const size_t player_id = iter->second;
+                if (player_id != this->await_action_from) {
+                    return events::PlayerEventAcknowledgement{false, system_initiated, "Not your turn"};
+                }
+                const auto bet_event = static_cast<events::BettingEvent*>(player_event);
+                this->await_action_from = std::nullopt;
+                this->state = *state_before_requested_action;
+                this->state_before_requested_action = std::nullopt;
+                onPlayerBettingAction(*bet_event);
+                return events::PlayerEventAcknowledgement{true, system_initiated, "Bet Accepted"};
+        }
+
+        return events::PlayerEventAcknowledgement{false, system_initiated, "Unknown Error"};
     }
 
 
     void PokerGame::handleInit() {
         // This should only be called once per game. A new game happens when >= 2
         // players have been seated.
+        this->state = GameState::Init;
+        std::vector<size_t> seated_players;
 
-        this->seated_players.reserve(this->seats.size());
+        seated_players.reserve(this->seats.size());
         for (size_t i = 0; i < this->seats.size(); i++) {
             if (this->seats[i].seat_state != SeatState::Empty) {
-                this->seated_players.push_back(i);
+                seated_players.push_back(i);
             }
         }
 
         this->deck.shuffle();
         std::vector<size_t> dealer_candidates;
-        dealer_candidates.reserve(this->seated_players.size());
-        for (const size_t &player: this->seated_players) {
+        dealer_candidates.reserve(seated_players.size());
+        for (const size_t &player: seated_players) {
             dealer_candidates.push_back(player);
         }
 
@@ -254,14 +298,14 @@ namespace pokergame::core {
         bool dealer_found = false;
 
         while (!dealer_found) {
-            for (const size_t &i: this->seated_players) {
+            for (const size_t &i: seated_players) {
                 this->seats[i].hand.push_back(this->deck.drawCard());
             }
             std::ranges::sort(dealer_candidates.begin(), dealer_candidates.end(), sorter);
-            const auto &highCardIndex = rankIndex(this->seats[dealer_candidates[0]].hand[0].rank);
+            const auto highCardIndex = rankIndex(this->seats[dealer_candidates[0]].hand[0].rank);
 
-            for (size_t i = dealer_candidates.size() - 1; i >= 1; i++) {
-                const auto &currentRankIndex = rankIndex(this->seats[i].hand[0].rank);
+            for (size_t i = dealer_candidates.size() - 1; i >= 1; i--) {
+                const auto currentRankIndex = rankIndex(this->seats[i].hand[0].rank);
                 if (currentRankIndex < highCardIndex) {
                     dealer_candidates.pop_back();
                 }
@@ -273,7 +317,7 @@ namespace pokergame::core {
         }
 
         this->dealer = dealer_candidates[0];
-        this->state = GameState::PreFlop;
+        this->handlePreFlop();
     }
 
     void PokerGame::resetTableStateForNewRound() {
@@ -298,68 +342,66 @@ namespace pokergame::core {
         }
     }
 
-    PlayerAction PokerGame::getPlayerAction(size_t player,
-                                            const std::unordered_set<BetType> &allowed_actions,
-                                            bet_t amount_owed) {
-        // Test-infrastructure sentinels (called only from runTests):
-        //   player == size_t(-1): reset queue and index
-        //   player == size_t(-2): push one action; BetType = sole element of allowed_actions,
-        //                         amount = amount_owed  (bet_t(-1) encodes nullopt)
-        static std::vector<PlayerAction> s_queue;
-        static size_t s_idx = 0;
-
-        if (player == static_cast<size_t>(-1)) {
-            s_queue.clear();
-            s_idx = 0;
-            return {BetType::Fold, std::nullopt};
+    void PokerGame::updatePlayersWhoOweActions(const size_t aggressor) {
+        players_who_owe_action.clear();
+        for (size_t offset = 1; offset < this->seats.size(); ++offset) {
+            const size_t idx = (aggressor + offset) % this->seats.size();
+            if (this->seats[idx].seat_state == SeatState::InHand && idx != aggressor) {
+                players_who_owe_action.insert(idx);
+            }
         }
-        if (player == static_cast<size_t>(-2)) {
-            assert(allowed_actions.size() == 1);
-            BetType bt = *allowed_actions.begin();
-            std::optional<bet_t> amt = (amount_owed == static_cast<bet_t>(-1))
-                                           ? std::nullopt
-                                           : std::optional<bet_t>{amount_owed};
-            s_queue.push_back({bt, amt});
-            return {BetType::Fold, std::nullopt};
-        }
-
-        // Consume from the test queue when populated
-        if (s_idx < s_queue.size()) {
-            return s_queue[s_idx++];
-        }
-
-        // Default production behaviour: check > call > bet > raise > fold
-        (void) player;
-        if (allowed_actions.contains(BetType::Check)) return {BetType::Check, std::nullopt};
-        if (allowed_actions.contains(BetType::Call)) return {BetType::Call, amount_owed};
-        if (allowed_actions.contains(BetType::Bet)) return {BetType::Bet, 10};
-        if (allowed_actions.contains(BetType::Raise)) return {BetType::Raise, amount_owed + 10};
-        return {BetType::Fold, std::nullopt};
     }
 
+    std::unordered_set<BetType> PokerGame::getAllowedActions() {
+        // Assumes player is InHand
+        if (this->first_pass_concluded && this->current_better == first_to_act && current_bet_to_match ==
+            std::nullopt) {
+            return {};
+        }
 
-    // seat state changes. i.e. someone folds. Particularly thinking about last aggressor / first better / etc
-    void PokerGame::handleBettingRound() {
-        std::unordered_map<size_t, bet_t> bets;
-        std::optional<size_t> current_better = nextBetter(dealer);
+        if (current_bet_to_match.has_value() && players_who_owe_action.empty()) {
+            return {};
+        }
+        std::unordered_set<BetType> types;
+        types.insert(BetType::Fold);
+        if (current_bet_to_match == std::nullopt) {
+            types.insert(BetType::Check);
+            types.insert(BetType::Bet);
+        } else {
+            assert(bets[*current_better] <= *current_bet_to_match);
+            const bet_t amount_owed = *current_bet_to_match - bets[*current_better];
+            if (this->seats[*current_better].chips > amount_owed) {
+                types.insert(BetType::Raise);
+            }
+            if (amount_owed == 0) {
+                types.insert(BetType::Check);
+            } else {
+                types.insert(BetType::Call);
+            }
+        }
+
+
+        if (current_better == first_to_act) {
+            first_pass_concluded = true;
+        }
+
+        return types;
+    }
+
+    // TODO: seat state changes. i.e. someone folds. Particularly thinking about last aggressor / first better / etc
+    void PokerGame::startBettingRound() {
+        current_better = nextBetter(dealer);
         // TODO: If current better is null, then there is only one player. Which shouldn't happen here?
         assert(current_better.has_value());
-        std::unordered_set<size_t> players_who_owe_action;
-        std::optional<bet_t> current_bet_to_match = std::nullopt;
-        bool first_pass_concluded = false;
-
-        auto update_players_who_owe_actions = [&](const size_t aggressor) -> void {
-            players_who_owe_action.clear();
-            for (size_t offset = 1; offset < this->seats.size(); ++offset) {
-                const size_t idx = (aggressor + offset) % this->seats.size();
-                if (this->seats[idx].seat_state == SeatState::InHand && idx != aggressor) {
-                    players_who_owe_action.insert(idx);
-                }
-            }
-        };
+        current_bet_to_match = std::nullopt;
+        this->first_pass_concluded = false;
 
         // Handle antes
         if (this->state == GameState::PreFlop) {
+            const size_t number_of_players = numberOfSeatsByState(this->seats, SeatState::InHand);
+            if (number_of_players == 2) {
+                current_better = dealer;
+            }
             assert(current_better.has_value());
             bet_t small_blind = *takeBet(*current_better, BetType::SmallBlind);
             bets[*current_better] = small_blind;
@@ -367,7 +409,7 @@ namespace pokergame::core {
             assert(current_better.has_value());
             bet_t big_blind = *takeBet(*current_better, BetType::BigBlind);
             bets[*current_better] = big_blind;
-            update_players_who_owe_actions(*current_better);
+            this->updatePlayersWhoOweActions(*current_better);
             current_better = nextBetter(*current_better);
             assert(current_better.has_value());
 
@@ -378,78 +420,52 @@ namespace pokergame::core {
             }
         }
 
-        const size_t first_to_act = *current_better;
+        this->first_to_act = *current_better;
+        this->advanceToNextBetter();
+    }
 
-        auto allowed_actions = [&]() -> std::unordered_set<BetType> {
-            // Assumes player is InHand
-            if (first_pass_concluded && current_better == first_to_act && current_bet_to_match == std::nullopt) {
-                return {};
-            }
-
-            if (current_bet_to_match.has_value() && players_who_owe_action.empty()) {
-                return {};
-            }
-            std::unordered_set<BetType> types;
-            types.insert(BetType::Fold);
-            if (current_bet_to_match == std::nullopt) {
-                types.insert(BetType::Check);
-                types.insert(BetType::Bet);
-            } else {
-                assert(bets[*current_better] <= *current_bet_to_match);
-                const bet_t amount_owed = *current_bet_to_match - bets[*current_better];
-                if (this->seats[*current_better].chips > amount_owed) {
-                    types.insert(BetType::Raise);
-                }
-                if (amount_owed == 0) {
-                    types.insert(BetType::Check);
-                } else {
-                    types.insert(BetType::Call);
-                }
-            }
-
-
-            if (current_better == first_to_act) {
-                first_pass_concluded = true;
-            }
-
-            return types;
-        };
-
-        std::unordered_set<BetType> better_allowed_actions = allowed_actions();
-        while (!better_allowed_actions.empty()) {
+    void PokerGame::advanceToNextBetter() {
+        const std::unordered_set<BetType> better_allowed_actions = this->getAllowedActions();
+        if (!better_allowed_actions.empty()) {
             bet_t amount_owed = 0;
             if (current_bet_to_match.has_value() && bets[*current_better] < *current_bet_to_match) {
                 amount_owed = *current_bet_to_match - bets[*current_better];
             }
-            const auto [action, amount] = this->getPlayerAction(
+
+            this->requestPlayerAction(
                 *current_better,
                 better_allowed_actions,
                 amount_owed
             );
-
-            auto potential_bet = takeBet(*current_better, action, amount);
-            if (potential_bet.has_value()) {
-                bets[*current_better] += *potential_bet;
-            }
-            if (action == BetType::Bet || action == BetType::Raise) {
-                current_bet_to_match = bets[*current_better];
-                update_players_who_owe_actions(*current_better);
-            } else {
-                players_who_owe_action.erase(*current_better);
-            }
-
-            const auto potentially_next_better = nextBetter(*current_better);
-            if (potentially_next_better == std::nullopt) {
-                break;
-            }
-            current_better = potentially_next_better;
-            better_allowed_actions = allowed_actions();
+        } else {
+            this->processBetsOnRoundConclusion(bets);
         }
-
-        this->processBetsOnRoundConclusion(bets);
     }
 
-    void PokerGame::setNextStreetOrFinishRound(const std::optional<GameState> next_street) {
+    void PokerGame::onPlayerBettingAction(const events::BettingEvent &betting_event) {
+        const auto action = betting_event.bet_type;
+        const auto amount = betting_event.amount;
+        const auto potential_bet = takeBet(*current_better, action, amount);
+        if (potential_bet.has_value()) {
+            bets[*current_better] += *potential_bet;
+        }
+        if (action == BetType::Bet || action == BetType::Raise) {
+            current_bet_to_match = bets[*current_better];
+            this->updatePlayersWhoOweActions(*current_better);
+        } else {
+            players_who_owe_action.erase(*current_better);
+        }
+
+        const auto potentially_next_better = nextBetter(*current_better);
+        if (potentially_next_better == std::nullopt) {
+            this->processBetsOnRoundConclusion(bets);
+            return;
+        }
+        current_better = potentially_next_better;
+        this->advanceToNextBetter();
+    }
+
+    void PokerGame::gotoNextStreetOrFinishRound(const std::optional<GameState> next_street) {
         using std::views::filter;
         using std::ranges::distance;
         auto in_hand = this->seats |
@@ -464,40 +480,75 @@ namespace pokergame::core {
         } else if (in_hand_count + all_in_count > 1) {
             this->state = GameState::Showdown;
         } else {
-            this->state = GameState::RoundComplete;
+            for (auto &seat: this->seats) {
+                if (seat.seat_state == SeatState::AllIn || seat.seat_state == SeatState::InHand) {
+                    for (auto& pot: this->pots) {
+                        seat.chips += pot.amount;
+                    }
+                    break;
+                }
+            }
+
+            this->state = GameState::RoundComplete; // TODO: Is this right?
+        }
+
+        switch (this->state) {
+            case GameState::Flop:
+                this->handleFlop();
+                break;
+            case GameState::Turn:
+                this->handleTurn();
+                break;
+            case GameState::River:
+                this->handleRiver();
+                break;
+            case GameState::Showdown:
+                this->handleShowdown();
+                break;
+            case GameState::RoundComplete:
+                this->handleRoundComplete();
+                break;
+            default:
+                assert(false); // Should never get here.
         }
     }
 
     void PokerGame::handlePreFlop() {
-        // Take antes
-        this->resetTableStateForNewRound();
-        // Check to see if people left the table and we need to stop the game loop
+        // TODO: Check to see if people left the table and we need to stop the game loop
         // This is the only place this can happen (even if players leave their seats during the round).
+
+        this->state = GameState::PreFlop;
+        this->resetTableStateForNewRound();
         if (this->state == GameState::NotStarted) {
             return;
         }
-        this->handleBettingRound();
-        this->setNextStreetOrFinishRound(GameState::Flop);
+        for (auto& seat: seats) {
+            if (seat.seat_state == SeatState::InHand) {
+                seat.hand.emplace_back(this->deck.drawCard());
+                seat.hand.emplace_back(this->deck.drawCard());
+            }
+        }
+        this->publishGameState();
+        this->startBettingRound();
     }
 
     void PokerGame::handleFlop() {
+        this->state = GameState::Flop;
         for (size_t i = 0; i < 3; i++) {
             this->community_cards.push_back(this->deck.drawCard());
         }
-        this->handleBettingRound();
-        this->setNextStreetOrFinishRound(GameState::Turn);
+        this->startBettingRound();
     }
 
     void PokerGame::handleTurn() {
+        this->state = GameState::Turn;
         this->community_cards.push_back(this->deck.drawCard());
-        this->handleBettingRound();
-        this->setNextStreetOrFinishRound(GameState::River);
+        this->startBettingRound();
     }
 
     void PokerGame::handleRiver() {
         this->community_cards.push_back(this->deck.drawCard());
-        this->handleBettingRound();
-        this->setNextStreetOrFinishRound(std::nullopt);
+        this->startBettingRound();
     }
 
 
@@ -533,14 +584,13 @@ namespace pokergame::core {
 
         for (const auto &[amount, participants]: this->pots) {
             std::unordered_map<size_t, std::vector<Card> > final_cards;
-            for (size_t i = 0; const auto &seat_idx: participants) {
+            for (const auto &seat_idx: participants) {
                 const auto &seat = this->seats[seat_idx];
                 std::vector<Card> seats_hand;
                 seats_hand.reserve(7);
                 seats_hand.insert(seats_hand.end(), this->community_cards.begin(), this->community_cards.end());
                 seats_hand.insert(seats_hand.end(), seat.hand.begin(), seat.hand.end());
-                final_cards[i] = seats_hand;
-                i++;
+                final_cards.insert_or_assign(seat_idx, seats_hand);
             }
 
             std::vector<ShowdownResult> winners = ShowdownEvaluator::evaluate(final_cards);
@@ -571,12 +621,25 @@ namespace pokergame::core {
             }
 
             for (const auto &[player_idx, payout]: payout_amounts) {
-                // TODO: Notify
                 this->seats[player_idx].chips += payout;
             }
+            this->publishGameState();
         }
     }
 
     void PokerGame::handleRoundComplete() {
+        this->state = GameState::RoundComplete;
+        events::GameStateNotification notification{
+            this->state,
+            this->seats,
+            10
+        };
+        do {
+            this->dealer = (this->dealer + 1) % this->seats.size();
+        } while (this->seats.at(dealer).seat_state == SeatState::Empty);
+
+        this->notifier->sendMessageToTableWithTimeoutCallback(this->game_id, &notification, 10, [this] {
+            this->handlePreFlop();
+        });
     }
 };

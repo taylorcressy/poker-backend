@@ -29,7 +29,7 @@ namespace pokergame::network::http {
     void HttpRoutes::createGame(uWS::HttpResponse<false> *res,
                                 uWS::HttpRequest *req,
                                 core::PokerLobby *lobby,
-                                std::shared_ptr<core::notifications::INotifier> notifier,
+                                std::shared_ptr<core::events::INotifier> notifier,
                                 std::function<void(std::string)> game_created_callback) {
         auto buffer = std::make_shared<std::string>();
         res->onAborted([] {

@@ -13,7 +13,7 @@ namespace pokergame::network::http {
         }
 
         // Creates a room and a game.
-        void createGame(uWS::HttpResponse<false> *, uWS::HttpRequest *, core::PokerLobby*, std::shared_ptr<core::notifications::INotifier>, std::function<void(std::string)> game_created_callback);
+        void createGame(uWS::HttpResponse<false> *, uWS::HttpRequest *, core::PokerLobby*, std::shared_ptr<core::events::INotifier>, std::function<void(std::string)> game_created_callback);
 
         void joinRoom(uWS::HttpResponse<false> *, uWS::HttpRequest *, core::PokerLobby*, uWS::Loop*);
 

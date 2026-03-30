@@ -8,15 +8,15 @@ using namespace core::types;
 // ---------------------------------------------------------------------------
 // Infrastructure
 // ---------------------------------------------------------------------------
-class TestNotifier: public notifications::INotifier {
+class TestNotifier: public events::INotifier {
 public:
     TestNotifier() = default;
 
-    void sendMessageToPlayer(const std::string &room_id, const std::string &player_id, notifications::Notification *) override {
+    void sendMessageToPlayer(const std::string &room_id, const std::string &player_id, events::Notification *) override {
 
     }
 
-    void sendMessageToTable(const std::string &room_id, notifications::Notification *) override {
+    void sendMessageToTable(const std::string &room_id, events::Notification *) override {
 
     }
 };

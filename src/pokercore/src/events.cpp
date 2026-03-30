@@ -1,6 +1,6 @@
-#include "notifications.h"
+#include "events.h"
 
-namespace pokergame::core::notifications {
+namespace pokergame::core::events {
 
     void Notification::toJson(nlohmann::json& j) const  {
         j["type"] = type;

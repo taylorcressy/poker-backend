@@ -155,6 +155,8 @@ namespace pokergame::core::types {
         SeatState seat_state;
     };
 
+
+
     enum class GameState {
         NotStarted,
         Init,
@@ -163,7 +165,8 @@ namespace pokergame::core::types {
         Turn,
         River,
         Showdown,
-        RoundComplete
+        RoundComplete,
+        RequestingPlayerAction,
     };
 
     inline std::string_view gameStateToString(const GameState &state) {
@@ -184,6 +187,8 @@ namespace pokergame::core::types {
                 return "ROUND_COMPLETE";
             case GameState::NotStarted:
                 return "NOT_STARTED";
+            case GameState::RequestingPlayerAction:
+                return "REQUESTING_PLAYER_ACTION";
             default:
                 return "UNKNOWN";
         }
@@ -193,6 +198,7 @@ namespace pokergame::core::types {
         size_t number_of_seats;
         unsigned long ante;
         unsigned long chips_when_seated;
+        uint8_t time_to_response_in_seconds;
     };
 
     struct Pot {
@@ -208,10 +214,5 @@ namespace pokergame::core::types {
         Call,
         Bet,
         Raise
-    };
-
-    struct PlayerAction {
-        BetType type;
-        std::optional<bet_t> amount;
     };
 }

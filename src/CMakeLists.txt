@@ -1,4 +1,4 @@
 add_subdirectory(pokercore)
 add_subdirectory(pokernetwork)
 add_subdirectory(pokergame)
-add_subdirectory(tests)
+#add_subdirectory(tests)

@@ -2,9 +2,8 @@
 #include "poker_core.h"
 #include "utils/crypto.h"
 
-// TODO: Thread safety
 namespace pokergame::core {
-    std::string PokerLobby::createRoom(const types::PokerConfiguration &poker_configuration, const std::string &owner, std::shared_ptr<notifications::INotifier> notifier) {
+    std::string PokerLobby::createRoom(const types::PokerConfiguration &poker_configuration, const std::string &owner, std::shared_ptr<events::INotifier> notifier) {
         auto room_id = utils::crypto::generate_unique_random_secret(8);
 
         while (this->rooms.contains(room_id)) {

@@ -1,7 +1,7 @@
 SET(POKERCORE_INCLUDE
         include/poker_types.h
         include/poker_core.h
-        include/notifications.h
+        include/events.h
 )
 
 SET(POKERCORE_PRIVATE_HEADERS
@@ -13,7 +13,7 @@ SET(POKERCORE_SRC
         src/poker_game.cpp
         src/poker_validator.cpp
         src/poker_lobby.cpp
-        src/notifications.cpp
+        src/events.cpp
 )
 
 add_library(pokercore STATIC
