@@ -21,6 +21,8 @@ namespace pokergame::network::http {
 
         void upgradeToWs(uWS::HttpResponse<false> *, uWS::HttpRequest *, us_socket_context_t*);
 
+        void cors(uWS::HttpResponse<false>*);
+
         ~HttpRoutes() = default;
 
     private:

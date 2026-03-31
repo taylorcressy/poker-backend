@@ -6,7 +6,6 @@
 #include "poker_network.h"
 #include "detail/http_routes.h"
 
-#include <functional>
 #include <iostream>
 #include <shared_mutex>
 
@@ -16,7 +15,8 @@
 namespace pokergame::network {
     struct LobbyLoop {
         core::PokerLobby lobby;
-        uWS::Loop* loop;
+        uWS::Loop *loop;
+        std::shared_ptr<ws::WSRoutes> ws_routes;
     };
 
     // Thread to lobby & loop mapping
@@ -34,14 +34,13 @@ namespace pokergame::network {
         for (size_t i = 0; i < number_of_cpu_threads; i++) {
             threads.emplace_back([i] {
                 auto app = uWS::App();
-                auto ws_routes = std::make_shared<ws::WSRoutes>(ws::WSRoutes(app));
-
-                {
+                auto ws_routes = std::make_shared<ws::WSRoutes>(ws::WSRoutes(app)); {
                     std::lock_guard map_guard(map_mutex);
-                    lobby_loops.emplace(i, LobbyLoop{core::PokerLobby{std::to_string(i)}, app.getLoop()});
+                    lobby_loops.emplace(i, LobbyLoop{core::PokerLobby{std::to_string(i)}, app.getLoop(), ws_routes});
                 }
 
-                const auto get_lobby_loop_thread_safe = [](uWS::HttpResponse<false> *res, uWS::HttpRequest *req, auto callback) {
+                const auto get_lobby_loop_thread_safe = [](uWS::HttpResponse<false> *res, uWS::HttpRequest *req,
+                                                           auto callback) {
                     const auto room_id = std::string(req->getParameter("room_id"));
 
                     if (room_id.empty()) {
@@ -50,8 +49,7 @@ namespace pokergame::network {
                         return;
                     }
 
-                    LobbyLoop *lobby_loop;
-                    {
+                    LobbyLoop *lobby_loop; {
                         std::shared_lock map_guard(map_mutex);
                         const auto it = room_id_to_thread.find(room_id);
                         if (it == room_id_to_thread.end()) {
@@ -66,29 +64,35 @@ namespace pokergame::network {
 
                     callback(lobby_loop, room_id);
                 };
+                
+                app.post("/*", [](auto *res, auto *req) {
+                   http::HttpRoutes::instance().cors(res);
+                });
 
                 app.post("/v1/poker/createGame", [i, ws_routes](auto *res, auto *req) {
                     // TODO: It's theoretically possible to have conflicting room_ids across these threads. Need to fix.
                     std::lock_guard map_guard(map_mutex);
-                    http::HttpRoutes::instance().createGame(res, req, &lobby_loops.at(i).lobby, ws_routes, [i](std::string room_id) {
-                        std::lock_guard internal_map_guard(map_mutex);
-                        room_id_to_thread.emplace(std::move(room_id), i);
-                    });
+                    http::HttpRoutes::instance().createGame(res, req, &lobby_loops.at(i).lobby, ws_routes,
+                                                            [i](std::string room_id) {
+                                                                std::lock_guard internal_map_guard(map_mutex);
+                                                                room_id_to_thread.emplace(std::move(room_id), i);
+                                                            });
                 });
                 app.post("/v1/poker/room/:room_id/join", [get_lobby_loop_thread_safe](auto *res, auto *req) {
-                    get_lobby_loop_thread_safe(res, req, [res, req](LobbyLoop* lobby_loop, const std::string& room_id) {
+                    get_lobby_loop_thread_safe(res, req, [res, req](LobbyLoop *lobby_loop, const std::string &room_id) {
                         if (lobby_loop != nullptr) {
                             http::HttpRoutes::instance().joinRoom(res, req, &lobby_loop->lobby, lobby_loop->loop);
                         }
                     });
                 });
                 app.post("/v1/poker/room/:room_id/leave", [get_lobby_loop_thread_safe](auto *res, auto *req) {
-                    get_lobby_loop_thread_safe(res, req, [res, req](LobbyLoop* lobby_loop, const std::string &room_id) {
+                    get_lobby_loop_thread_safe(res, req, [res, req](LobbyLoop *lobby_loop, const std::string &room_id) {
                         if (lobby_loop != nullptr) {
-                            http::HttpRoutes::instance().leaveRoom(res, req, &lobby_loop->lobby, lobby_loop->loop, [room_id] {
-                                std::lock_guard internal_map_guard(map_mutex);
-                                room_id_to_thread.erase(room_id);
-                            });
+                            http::HttpRoutes::instance().leaveRoom(res, req, &lobby_loop->lobby, lobby_loop->loop,
+                                                                   [room_id] {
+                                                                       std::lock_guard internal_map_guard(map_mutex);
+                                                                       room_id_to_thread.erase(room_id);
+                                                                   });
                         }
                     });
                 });
@@ -102,28 +106,68 @@ namespace pokergame::network {
                                                   http::HttpRoutes::instance().upgradeToWs(res, req, context);
                                               },
                                               .open = [ws_routes](uWS::WebSocket<false, true, auth::AuthContext> *ws) {
-                                                  std::cout << "Player [" << ws->getUserData()->username <<
-                                                          "] connected to room [" << ws->getUserData()->room_id << "]" <<
-                                                          std::endl;
-                                                  ws_routes->playerConnected(ws, ws->getUserData());
+                                                  const auth::AuthContext *ctx = ws->getUserData();
+                                                  std::cout << "Player [" << ctx->username <<
+                                                          "] connected to room [" << ctx->room_id << "]" << std::endl;
+                                                  const std::string socket_id = ctx->room_id + "-" + ctx->username;
+                                                  ws::WSRoutes::registerSocket(socket_id, ws, uWS::Loop::get());
+                                                  ws_routes->playerConnected(ws, ctx);
                                               },
                                               .message = [](uWS::WebSocket<false, true, auth::AuthContext> *ws,
-                                                            const std::string_view message, const uWS::OpCode op_code) {
+                                                            std::string_view message,
+                                                            uWS::OpCode op_code) {
                                                   if (op_code != uWS::TEXT) {
-                                                      std::cout << "Received non text message from client: " << ws->
-                                                              getUserData()->room_id << "-" << ws->getUserData()->username <<
-                                                              std::endl;
+                                                      std::cerr << "Received non-text message from ["
+                                                                << ws->getUserData()->room_id << "-"
+                                                                << ws->getUserData()->username << "]" << std::endl;
                                                       return;
                                                   }
 
-                                                  // TODO: Message handling
+                                                  std::optional<std::unique_ptr<core::events::PlayerEvent>> event_opt;
+                                                  try {
+                                                      event_opt = core::events::from_json(message);
+                                                  } catch (...) {}
+
+                                                  if (!event_opt) {
+                                                      ws->send(R"({"type":"error","message":"invalid_message"})", uWS::TEXT);
+                                                      return;
+                                                  }
+
+                                                  const std::string room_id = ws->getUserData()->room_id;
+                                                  const std::string username = ws->getUserData()->username;
+
+                                                  LobbyLoop *lobby_loop = nullptr;
+                                                  {
+                                                      std::shared_lock lock(map_mutex);
+                                                      const auto it = room_id_to_thread.find(room_id);
+                                                      if (it == room_id_to_thread.end()) {
+                                                          ws->send(R"({"type":"error","message":"room_not_found"})", uWS::TEXT);
+                                                          return;
+                                                      }
+                                                      lobby_loop = &lobby_loops.at(it->second);
+                                                  }
+
+                                                  auto shared_event = std::shared_ptr(std::move(*event_opt));
+                                                  auto lobby_ws_routes = lobby_loop->ws_routes;
+                                                  auto *lobby = &lobby_loop->lobby;
+
+                                                  lobby_loop->loop->defer([lobby, lobby_ws_routes, room_id, username, shared_event] {
+                                                      auto ack = lobby->sendMessageToRoom(room_id, username, shared_event.get());
+                                                      if (ack) {
+                                                          lobby_ws_routes->sendMessageToPlayer(room_id, username, &*ack);
+                                                      }
+                                                  });
                                               },
-                                              .close = [ws_routes](uWS::WebSocket<false, true, auth::AuthContext> *ws, int code,
+                                              .close = [ws_routes](uWS::WebSocket<false, true, auth::AuthContext> *ws,
+                                                                   int code,
                                                                    std::string_view message) {
-                                                  std::cout << "Player [" << ws->getUserData()->username <<
-                                                          "] disconnected from room [" << ws->getUserData()->room_id << "]" <<
+                                                  const auth::AuthContext *ctx = ws->getUserData();
+                                                  std::cout << "Player [" << ctx->username <<
+                                                          "] disconnected from room [" << ctx->room_id << "]" <<
                                                           std::endl;
-                                                  ws_routes->playerDisconnected(ws->getUserData());
+                                                  const std::string socket_id = ctx->room_id + "-" + ctx->username;
+                                                  ws::WSRoutes::unregisterSocket(socket_id);
+                                                  ws_routes->playerDisconnected(ctx);
                                               },
                                           });
 

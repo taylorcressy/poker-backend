@@ -1,6 +1,7 @@
 #include <algorithm>
-#include <assert.h>
+#include <cassert>
 
+#include "events.h"
 #include "poker_core.h"
 #include "detail/poker_validator.h"
 #include <iostream>
@@ -231,12 +232,12 @@ namespace pokergame::core {
         );
     }
 
-    events::PlayerEventAcknowledgement PokerGame::handlePlayerEvent(const std::string& username,
+    events::PlayerEventAcknowledgement PokerGame::handlePlayerEvent(const std::string_view username,
                                                                     events::PlayerEvent *player_event,
                                                                     const bool system_initiated) {
 
         switch (player_event->event_type) {
-            case events::PlayerEventType::START:
+            case events::PlayerEventType::START: {
                 if (this->state != GameState::NotStarted) {
                     return events::PlayerEventAcknowledgement{false, system_initiated, "Game already started"};
                 }
@@ -247,11 +248,12 @@ namespace pokergame::core {
 
                 this->handleInit();
                 return events::PlayerEventAcknowledgement{true, system_initiated, "Game Started"};
-            case events::PlayerEventType::BETTING_ACTION:
+            }
+            case events::PlayerEventType::BETTING_ACTION: {
                 if (state != GameState::RequestingPlayerAction) {
                     return events::PlayerEventAcknowledgement{false, system_initiated, "Not your turn"};
                 }
-                const auto iter = this->username_to_seat.find(username);
+                const auto iter = this->username_to_seat.find(std::string(username));
                 if (iter == this->username_to_seat.end()) {
                     return events::PlayerEventAcknowledgement{false, system_initiated, "Player not found"};
                 }
@@ -259,12 +261,28 @@ namespace pokergame::core {
                 if (player_id != this->await_action_from) {
                     return events::PlayerEventAcknowledgement{false, system_initiated, "Not your turn"};
                 }
-                const auto bet_event = static_cast<events::BettingEvent*>(player_event);
+                const auto bet_event = dynamic_cast<events::BettingEvent*>(player_event);
+                if (bet_event == nullptr) {
+                    return events::PlayerEventAcknowledgement{false, system_initiated, "Unknown Error"};
+                }
                 this->await_action_from = std::nullopt;
                 this->state = *state_before_requested_action;
                 this->state_before_requested_action = std::nullopt;
                 onPlayerBettingAction(*bet_event);
                 return events::PlayerEventAcknowledgement{true, system_initiated, "Bet Accepted"};
+            }
+            case events::PlayerEventType::SEAT_PLAYER: {
+                const auto seat_player_event = dynamic_cast<events::SeatPlayerEvent*>(player_event);
+                if (seat_player_event == nullptr) {
+                    return events::PlayerEventAcknowledgement{false, system_initiated, "Unknown error"};
+                }
+                const bool result = this->seatPlayer(std::string(username), seat_player_event->seat_id);
+                return events::PlayerEventAcknowledgement{result, system_initiated, result ? "Player Seated" : "Seat Occupied"};
+            }
+
+            case events::PlayerEventType::UNSEAT_PLAYER: {
+                throw std::runtime_error("Not implemented");
+            }
         }
 
         return events::PlayerEventAcknowledgement{false, system_initiated, "Unknown Error"};

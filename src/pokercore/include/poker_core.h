@@ -23,7 +23,9 @@ namespace pokergame::core {
 
         ~PokerGame() = default;
 
-        events::PlayerEventAcknowledgement handlePlayerEvent(const std::string& username, events::PlayerEvent*, bool system_initiated);
+        events::PlayerEventAcknowledgement handlePlayerEvent(std::string_view username,
+            events::PlayerEvent*,
+            bool system_initiated);
 
         bool seatPlayer(const std::string &name, size_t seat_index);
         // TODO: unSeatPlayer
@@ -115,10 +117,12 @@ namespace pokergame::core {
 
         bool joinRoom(const std::string& room_id, const std::string& player_name);
 
+        std::optional<events::PlayerEventAcknowledgement> sendMessageToRoom(std::string_view room_id, std::string_view username, events::PlayerEvent*);
+
         LeaveRoomResult leaveRoom(const std::string& room_id, const std::string& player_name);
 
     private:
-        std::unordered_map<std::string, std::shared_ptr<PokerRoom>> rooms; // Room ID to Room instance
+        std::unordered_map<std::string_view, std::shared_ptr<PokerRoom>> rooms; // Room ID to Room instance
 
     };
 }

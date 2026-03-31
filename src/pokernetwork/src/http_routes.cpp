@@ -192,6 +192,8 @@ namespace pokergame::network::http {
         });
     }
 
+
+
     void HttpRoutes::upgradeToWs(uWS::HttpResponse<false> *res, uWS::HttpRequest *req, us_socket_context_t *context) {
         res->onAborted(onAborted);
         auto secKey = req->getHeader("sec-websocket-key");
@@ -215,5 +217,13 @@ namespace pokergame::network::http {
             req->getHeader("sec-websocket-extensions"),
             context
         );
+    }
+
+    void HttpRoutes::cors(uWS::HttpResponse<false>* res) {
+        res->writeHeader("Access-Control-Allow-Origin", "http://localhost:3000")
+           ->writeHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+           ->writeHeader("Access-Control-Allow-Headers", "*")
+           ->writeStatus("204 No Content")
+           ->end();
     }
 }

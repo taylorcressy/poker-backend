@@ -2,11 +2,14 @@
 
 #include "App.h"
 
-#include <assert.h>
-
 // TODO: These player messages need an ack process.
-// TODO: Clear from state (table channel / user sockets / timer stuff) when games disconnect
+// TODO: Clear from state (table channel / timer stuff) when games disconnect
 namespace pokergame::network::ws {
+
+    // Static member definitions
+    std::unordered_map<std::string, UserSocket> WSRoutes::s_user_sockets;
+    std::shared_mutex WSRoutes::s_sockets_mutex;
+
     inline std::string constructUserSocketId(const auth::AuthContext *auth) {
         return auth->room_id + "-" + auth->username;
     }
@@ -18,53 +21,53 @@ namespace pokergame::network::ws {
     WSRoutes::WSRoutes(uWS::App &app) : app(app) {
     }
 
+    void WSRoutes::registerSocket(const std::string &socket_id,
+                                   uWS::WebSocket<false, true, auth::AuthContext> *ws,
+                                   uWS::Loop *loop) {
+        std::lock_guard lock(s_sockets_mutex);
+        s_user_sockets.insert_or_assign(socket_id, UserSocket{ws, loop});
+    }
+
+    void WSRoutes::unregisterSocket(const std::string &socket_id) {
+        std::lock_guard lock(s_sockets_mutex);
+        s_user_sockets.erase(socket_id);
+    }
+
     void WSRoutes::playerConnected(uWS::WebSocket<false, true, auth::AuthContext> *ws,
                                    const auth::AuthContext *context) {
         const std::string channel = context->room_id + "-broadcast";
-        const std::string user_socket_id = constructUserSocketId(context);
         if (!this->table_channels.contains(context->room_id)) {
             this->table_channels.emplace(context->room_id, channel);
         }
         ws->subscribe(channel);
-
-        if (!this->user_sockets.contains(user_socket_id)) {
-            this->user_sockets.emplace(user_socket_id, ws);
-        }
-    }
-
-    void WSRoutes::playerMessageReceived(const auth::AuthContext *context, const std::string_view &message) {
-        const std::string socket_id = constructUserSocketId(context);
-        if (!this->user_sockets.contains(socket_id)) {
-            assert(false); // TODO: Handle
-            return;
-        }
-
-        // Determine if poker room is expecting a message. If not ignore message.
-        // If it is, interrupt the timeout and pass to poker room?
     }
 
     void WSRoutes::playerDisconnected(const auth::AuthContext *context) {
-        const auto socket_id = constructUserSocketId(context);
-        if (this->user_sockets.contains(socket_id)) {
-            this->user_sockets.erase(socket_id);
-        }
-
         // TODO: Inform game of seat disconnect
     }
 
     void WSRoutes::sendMessageToPlayer(const std::string &room_id, const std::string &username,
                                        core::events::Notification *notification) {
         const auto socket_id = constructUserSocketId(room_id, username);
-        if (this->user_sockets.contains(socket_id)) {
-            this->user_sockets.at(socket_id)->send(notification->dump(), uWS::TEXT);
-        }
+        const std::string msg = notification->dump();
+
+        std::shared_lock lock(s_sockets_mutex);
+        const auto it = s_user_sockets.find(socket_id);
+        if (it == s_user_sockets.end()) return;
+        auto *target_loop = it->second.loop;
+        auto *target_ws = it->second.ws;
+        lock.unlock();
+
+        target_loop->defer([target_ws, msg] {
+            target_ws->send(msg, uWS::TEXT);
+        });
     }
 
     struct TimerData {
-        uint8_t timer_id;
+        uint8_t timer_id{};
         std::string room_id;
         std::function<void()> timeout_callback;
-        std::unordered_map<std::string, std::unordered_map<uint8_t, us_timer_t *> > *running_timers;
+        std::unordered_map<std::string, std::unordered_map<uint8_t, us_timer_t *> > *running_timers{};
     };
 
     uint8_t WSRoutes::createCallback(const std::string &room_id,
