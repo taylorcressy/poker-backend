@@ -122,7 +122,7 @@ namespace pokergame::core {
         LeaveRoomResult leaveRoom(const std::string& room_id, const std::string& player_name);
 
     private:
-        std::unordered_map<std::string_view, std::shared_ptr<PokerRoom>> rooms; // Room ID to Room instance
+        std::unordered_map<std::string, std::shared_ptr<PokerRoom>> rooms; // Room ID to Room instance
 
     };
 }

@@ -350,6 +350,12 @@ namespace pokergame::core {
                 seat.hand.clear();
             }
             if (seat.seat_state != SeatState::Empty) {
+                if (seat.chips == 0) {
+                    seat.seat_state = SeatState::Empty;
+                    this->username_to_seat.erase(seat.name);
+                    seat.name = "";
+                    continue;
+                }
                 seat.seat_state = SeatState::InHand;
                 count++;
             }

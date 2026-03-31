@@ -39,7 +39,7 @@ namespace pokergame::network::auth {
         return {true, extracted};
     }
 
-    std::optional<AuthContext> JWTHandler::extractAuthContextFromCookie(const std::string_view &cookie_header) {
+    std::optional<AuthContext> JWTHandler::extractAuthContextFromCookie(const std::string_view cookie_header) {
         const std::vector<std::string_view> cookies = utils::string::split_string_view(cookie_header, ';');
         if (cookies.empty()) {
             return std::nullopt;

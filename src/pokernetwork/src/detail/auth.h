@@ -24,7 +24,7 @@ namespace pokergame::network::auth {
         }
 
         [[nodiscard]] static std::string generateJwt(const std::unordered_map<std::string, std::string>& claims) ;
-        [[nodiscard]] static std::optional<AuthContext> extractAuthContextFromCookie(const std::string_view &cookie_header);
+        [[nodiscard]] static std::optional<AuthContext> extractAuthContextFromCookie(std::string_view cookie_header);
 
     private:
         [[nodiscard]] JWTExtract decodeAndVerify(const std::string& token, const std::vector<std::string>& claims) const;

@@ -64,8 +64,8 @@ namespace pokergame::network {
 
                     callback(lobby_loop, room_id);
                 };
-                
-                app.post("/*", [](auto *res, auto *req) {
+
+                app.options("/*", [](auto *res, auto *req) {
                    http::HttpRoutes::instance().cors(res);
                 });
 

@@ -25,7 +25,6 @@ namespace pokergame::network::http {
         std::cout << "Client walked away" << std::endl;
     }
 
-    // TODO: These are all wrong. Need to implement .onData
     void HttpRoutes::createGame(uWS::HttpResponse<false> *res,
                                 uWS::HttpRequest *req,
                                 core::PokerLobby *lobby,
@@ -36,7 +35,7 @@ namespace pokergame::network::http {
             onAborted();
         });
 
-        res->onData([buffer, res, lobby, game_created_callback, notifier](const std::string_view chunk, const bool is_last) {
+        res->onData([buffer, res, lobby, game_created_callback, notifier, this](const std::string_view chunk, const bool is_last) {
             buffer->append(chunk);
 
             try {
@@ -48,6 +47,7 @@ namespace pokergame::network::http {
                         !json.contains("ante") ||
                         !json.contains("chips_when_seated")) {
                         res->writeStatus("400 Bad Request");
+                        this->setCorsHeaders(res);
                         res->end();
                         return;
                     }
@@ -56,9 +56,17 @@ namespace pokergame::network::http {
                     const size_t number_of_seats = json.at("number_of_seats").get<size_t>();
                     const size_t ante = json.at("ante").get<unsigned long>();
                     const size_t chips_when_seated = json.at("chips_when_seated").get<unsigned long>();
+                    uint8_t time_to_respond_in_seconds = 20;
+                    if (json.contains("time_to_respond_in_seconds")) {
+                        try {
+                            time_to_respond_in_seconds = json.at("time_to_respond_in_seconds").get<uint8_t>();
+                        } catch (nlohmann::detail::out_of_range& e) {
+                            std::cerr << "Failed to parse time_to_respond_in_seconds as a uint8: " << e.what() << std::endl;
+                        }
+                    }
 
 
-                    const core::types::PokerConfiguration configuration{number_of_seats, ante, chips_when_seated};
+                    const core::types::PokerConfiguration configuration{number_of_seats, ante, chips_when_seated, time_to_respond_in_seconds};
                     std::string room_id = lobby->createRoom(configuration, std::string(username), notifier);
 
                     const auto token = auth::JWTHandler::generateJwt({
@@ -67,9 +75,12 @@ namespace pokergame::network::http {
                         {"username", std::string(username)}
                     });
 
-                    res->writeHeader("Set-Cookie", "jwt=" + token + "; HttpOnly; Secure; Path=/");
                     res->writeStatus("201 CREATED");
-                    res->end("Created");
+                    this->setCorsHeaders(res);
+                    res->writeHeader("Set-Cookie", "jwt=" + token + "; HttpOnly; SameSite=None; Path=/");
+                    res->end(R"({"game_id": ")"+ room_id +"\"}");
+
+                    std::cout << "Successfully created game with game id: " << room_id << std::endl;
 
                     buffer->clear();
                     game_created_callback(std::move(room_id));
@@ -77,10 +88,12 @@ namespace pokergame::network::http {
             } catch (nlohmann::detail::parse_error &err) {
                 std::cerr << err.what() << std::endl;
                 res->writeStatus("400 BAD REQUEST");
+                this->setCorsHeaders(res);
                 res->end("Bad Request");
             } catch (...) {
                 std::cerr << "Unknown critical error" << std::endl;
                 res->writeStatus("500 INTERNAL SERVER ERROR");
+                this->setCorsHeaders(res);
                 res->end("Internal Server Error");
             }
         });
@@ -100,7 +113,9 @@ namespace pokergame::network::http {
 
         const auto room_id = std::string(req->getParameter("room_id"));
 
-        res->onData([aborted, buffer, room_id, res, loop, lobby](const std::string_view chunk, const bool is_last) {
+        std::cout << "Received join request for room: " << room_id << std::endl;
+
+        res->onData([aborted, buffer, room_id, res, loop, lobby, this](const std::string_view chunk, const bool is_last) {
             buffer->append(chunk);
 
             if (is_last) {
@@ -111,44 +126,48 @@ namespace pokergame::network::http {
 
                     if (!json.contains("username") || room_id.empty()) {
                         res->writeStatus("400 Bad Request");
+                        this->setCorsHeaders(res);
                         res->end();
                         return;
                     }
                     const auto username = json["username"].get<std::string>();
-                    loop->defer([aborted, res, username, room_id, current_loop, lobby] {
+                    loop->defer([aborted, res, username, room_id, current_loop, lobby, this] {
                         // Need to perform game logic on originating loop (dictated by createGame
                         const bool success = lobby->joinRoom(room_id, username);
                         auto lobby_id = lobby->lobby_id; // Pull lobby_id from the owning thread/loop. Shouldn't change, but doing here for correctness
-                        current_loop->defer([lobby_id, aborted, res, room_id, username, success] {
+                        current_loop->defer([lobby_id, aborted, res, room_id, username, success, this] {
                             if (*aborted) {
                                 return;
                             }
 
                             if (!success) {
                                 res->writeStatus("404 Not Found");
+                                this->setCorsHeaders(res);
                                 res->end();
                                 return;
                             }
-
                             const auto token = pokergame::network::auth::JWTHandler::generateJwt({
                                 {"lobby_id", lobby_id},
                                 {"room_id", room_id},
                                 {"username", username}
                             });
 
+                            res->writeStatus("200 OK");
+                            this->setCorsHeaders(res);
                             res->writeHeader("Set-Cookie",
                                              "jwt=" + token + "; HttpOnly; Secure; SameSite=Strict; Path=/");
-                            res->writeStatus("200 OK");
                             res->end("Authenticated");
                         });
                     });
                 } catch (nlohmann::detail::parse_error &err) {
                     std::cerr << err.what() << std::endl;
                     res->writeStatus("400 BAD REQUEST");
+                    this->setCorsHeaders(res);
                     res->end("Bad Request");
                 } catch (...) {
                     std::cerr << "Unknown critical error" << std::endl;
                     res->writeStatus("500 INTERNAL SERVER ERROR");
+                    this->setCorsHeaders(res);
                     res->end("Internal Server Error");
                 }
             }
@@ -164,48 +183,52 @@ namespace pokergame::network::http {
 
         auto current_loop = uWS::Loop::get();
 
-        const auto auth_context = auth::JWTHandler::instance().extractAuthContextFromCookie(req->getHeader("Cookie"));
+        const auto auth_context = auth::JWTHandler::instance().extractAuthContextFromCookie(req->getHeader("cookie"));
         if (!auth_context.has_value()) {
             res->writeStatus("401 Unauthorized");
+            this->setCorsHeaders(res);
             res->end();
             return;
         }
 
-        loop->defer([final_player_left_callback, current_loop, lobby, auth_context, res, aborted] {
+        loop->defer([final_player_left_callback, current_loop, lobby, auth_context, res, aborted, this] {
             auto [player_left, last_player_left] = lobby->leaveRoom(auth_context->room_id, auth_context->username);
             if (last_player_left) {
                 final_player_left_callback();
             }
-            current_loop->defer([res, player_left, aborted] {
+            current_loop->defer([res, player_left, aborted, this] {
                 if (*aborted) {
                     return;
                 }
                 if (player_left) {
                     res->writeStatus("200 OK");
+                    this->setCorsHeaders(res);
                     res->end();
                 } else {
                     // Could probably do better error handling here
                     res->writeStatus("400 Bad Request");
+                    this->setCorsHeaders(res);
                     res->end();
                 }
             });
         });
     }
 
-
-
     void HttpRoutes::upgradeToWs(uWS::HttpResponse<false> *res, uWS::HttpRequest *req, us_socket_context_t *context) {
         res->onAborted(onAborted);
         auto secKey = req->getHeader("sec-websocket-key");
         if (secKey.empty()) {
-            res->writeStatus("400 Bad Request")->end("Not a WS Handshake");
+            res->writeStatus("400 Bad Request");
+            this->setCorsHeaders(res);
+            res->end("Not a WS Handshake");
             return;
         }
 
-        const auto auth_context = auth::JWTHandler::instance()
-                .extractAuthContextFromCookie(req->getHeader("Cookie"));
+        const auto cookie_header = req->getHeader("cookie");
+        const auto auth_context = auth::JWTHandler::extractAuthContextFromCookie(cookie_header);
         if (!auth_context.has_value()) {
             res->writeStatus("401 Unauthorized");
+            this->setCorsHeaders(res);
             res->end();
             return;
         }
@@ -220,10 +243,15 @@ namespace pokergame::network::http {
     }
 
     void HttpRoutes::cors(uWS::HttpResponse<false>* res) {
-        res->writeHeader("Access-Control-Allow-Origin", "http://localhost:3000")
+        res->writeStatus("204 No Content");
+        this->setCorsHeaders(res);
+        res->end();
+    }
+
+    void HttpRoutes::setCorsHeaders(uWS::HttpResponse<false>* res) {
+        res->writeHeader("Access-Control-Allow-Origin", "http://localhost:3001")
            ->writeHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
            ->writeHeader("Access-Control-Allow-Headers", "*")
-           ->writeStatus("204 No Content")
-           ->end();
+           ->writeHeader("Access-Control-Allow-Credentials", "true");
     }
 }

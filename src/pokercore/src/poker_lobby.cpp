@@ -1,4 +1,6 @@
 
+#include <utility>
+
 #include "poker_core.h"
 #include "utils/crypto.h"
 
@@ -16,7 +18,7 @@ namespace pokergame::core {
         users.reserve(poker_configuration.number_of_seats);
         users.insert(owner);
 
-        this->rooms.emplace(room_id, std::make_shared<PokerRoom>(PokerGame(poker_configuration, notifier, room_id), owner, users));
+        this->rooms.emplace(room_id, std::make_shared<PokerRoom>(PokerGame(poker_configuration, std::move(notifier), room_id), owner, users));
         return room_id;
     }
 
@@ -33,7 +35,7 @@ namespace pokergame::core {
         const std::string_view username,
         events::PlayerEvent* event) {
 
-        const auto it = this->rooms.find(room_id);
+        const auto it = this->rooms.find(std::string(room_id));
         if (this->rooms.end() == it) {
             return std::nullopt;
         }

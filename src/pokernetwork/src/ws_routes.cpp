@@ -160,6 +160,7 @@ namespace pokergame::network::ws {
         }
     }
 
+    // TODO: This is broken. We need to publish on all threads.
     void WSRoutes::sendMessageToTable(const std::string &room_id, core::events::Notification *notification) {
         const std::string channel = room_id + "-broadcast";
         this->app.publish(channel, notification->dump(), uWS::TEXT);

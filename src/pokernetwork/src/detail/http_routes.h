@@ -27,5 +27,7 @@ namespace pokergame::network::http {
 
     private:
         HttpRoutes() = default;
+
+        void setCorsHeaders(uWS::HttpResponse<false>* res);
     };
 };
