@@ -16,21 +16,21 @@ namespace pokergame::core::events {
     };
 
     NLOHMANN_JSON_SERIALIZE_ENUM(PlayerEventType, {
-        {PlayerEventType::START, "START"},
-        {PlayerEventType::BETTING_ACTION, "BETTING_ACTION"},
-        {PlayerEventType::SEAT_PLAYER, "SEAT_PLAYER"},
-        {PlayerEventType::SEAT_PLAYER, "UNSEAT_PLAYER"},
-    });
+                                 {PlayerEventType::START, "START"},
+                                 {PlayerEventType::BETTING_ACTION, "BETTING_ACTION"},
+                                 {PlayerEventType::SEAT_PLAYER, "SEAT_PLAYER"},
+                                 {PlayerEventType::SEAT_PLAYER, "UNSEAT_PLAYER"},
+                                 });
 
     NLOHMANN_JSON_SERIALIZE_ENUM(types::BetType, {
-        { types::BetType::Check, "CHECK"},
-        { types::BetType::SmallBlind, "SMALL_BLIND"},
-        { types::BetType::BigBlind, "BIG_BLIND" },
-        { types::BetType::Fold, "FOLD" },
-        { types::BetType::Call, "CALL" },
-        { types::BetType::Bet, "BET" },
-        { types::BetType::Raise, "RAISE" },
-    })
+                                 { types::BetType::Check, "CHECK"},
+                                 { types::BetType::SmallBlind, "SMALL_BLIND"},
+                                 { types::BetType::BigBlind, "BIG_BLIND" },
+                                 { types::BetType::Fold, "FOLD" },
+                                 { types::BetType::Call, "CALL" },
+                                 { types::BetType::Bet, "BET" },
+                                 { types::BetType::Raise, "RAISE" },
+                                 })
 
     struct PlayerEvent {
         PlayerEventType event_type;
@@ -57,14 +57,17 @@ namespace pokergame::core::events {
 
     struct SeatPlayerEvent : PlayerEvent {
         size_t seat_id;
-        explicit SeatPlayerEvent(const size_t seat_id) : PlayerEvent{PlayerEventType::SEAT_PLAYER},  seat_id{seat_id} {}
+
+        explicit SeatPlayerEvent(const size_t seat_id) : PlayerEvent{PlayerEventType::SEAT_PLAYER}, seat_id{seat_id} {
+        }
     };
 
     struct UnseatPlayerEvent : PlayerEvent {
-        UnseatPlayerEvent() : PlayerEvent{PlayerEventType::UNSEAT_PLAYER} {}
+        UnseatPlayerEvent() : PlayerEvent{PlayerEventType::UNSEAT_PLAYER} {
+        }
     };
 
-    std::optional<std::unique_ptr<PlayerEvent>> from_json(std::string_view str);
+    std::optional<std::unique_ptr<PlayerEvent> > from_json(std::string_view str);
 
     ////
     //Outgoing event types
@@ -103,19 +106,23 @@ namespace pokergame::core::events {
 
     struct GameStateNotification : Notification {
         types::GameState round;
+        const types::PokerConfiguration *configuration;
         std::vector<types::Seat> seats;
         std::optional<uint8_t> game_paused_for_seconds;
 
         explicit GameStateNotification(const types::GameState round,
+                                       const types::PokerConfiguration *config,
                                        std::vector<types::Seat> seats,
                                        const std::optional<uint8_t> paused_for_seconds) : Notification("GameState"),
-                                                                                round{round},
-                                                                                seats{std::move(seats)},
-                                                                                game_paused_for_seconds{paused_for_seconds} {}
+            round{round},
+            configuration{config},
+            seats{std::move(seats)},
+            game_paused_for_seconds{paused_for_seconds} {
+        }
 
         void toJson(nlohmann::json &j) const override;
 
-        NLOHMANN_DEFINE_TYPE_INTRUSIVE(GameStateNotification, round);
+        NLOHMANN_DEFINE_TYPE_INTRUSIVE(GameStateNotification, round, configuration, seats, game_paused_for_seconds);
     };
 
 

@@ -25,6 +25,12 @@ namespace pokergame::core::events {
     void GameStateNotification::toJson(nlohmann::json &j) const {
         Notification::toJson(j);
         j["round"] = types::gameStateToString(this->round);
+        j["game_config"] = nlohmann::json{
+            {"ante", configuration->ante},
+            {"chips_when_seated", configuration->chips_when_seated},
+            {"number_of_seats", configuration->number_of_seats},
+            {"time_to_respond_in_seconds", configuration->time_to_response_in_seconds}
+        };
         j["seats"] = nlohmann::json::array();
         for (const auto& seat: seats) {
             j["seats"].push_back( {
@@ -32,6 +38,12 @@ namespace pokergame::core::events {
                 {"name", seat.name},
                 {"seat_state", types::seatStateToString(seat.seat_state)}
             } );
+        }
+
+        if (game_paused_for_seconds.has_value()) {
+            j["game_paused_for_seconds"] = *game_paused_for_seconds;
+        } else {
+            j["game_paused_for_seconds"] = nullptr;
         }
     }
 

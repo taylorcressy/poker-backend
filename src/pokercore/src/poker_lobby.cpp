@@ -43,6 +43,15 @@ namespace pokergame::core {
         return it->second->game.handlePlayerEvent(username, event, false);
     }
 
+    std::unique_ptr<events::GameStateNotification> PokerLobby::getGameState(const std::string& room_id) {
+        const auto it = this->rooms.find(room_id);
+        if (this->rooms.end() == it) {
+            return nullptr;
+        }
+
+        return it->second->game.getGameState();
+    }
+
     // TODO: We want probably want to enhance this logic. If everyone drops we would want a grace period before the game just ends.
     LeaveRoomResult PokerLobby::leaveRoom(const std::string &room_id, const std::string &player_name) {
         if (const auto room_iter = this->rooms.find(room_id); room_iter != this->rooms.end()) {

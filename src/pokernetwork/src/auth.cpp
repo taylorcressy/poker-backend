@@ -23,20 +23,21 @@ namespace pokergame::network::auth {
     }
 
     JWTExtract JWTHandler::decodeAndVerify(const std::string& token, const std::vector<std::string>& claims) const {
-        std::unordered_map<std::string, std::string> extracted;
-        const auto decoded = jwt::decode(token);
         try {
+            std::unordered_map<std::string, std::string> extracted;
+
+            const auto decoded = jwt::decode(token);
             verifier.verify(decoded);
+
+            for (const auto& claim: claims) {
+                extracted[claim] = decoded.get_payload_claim(claim).as_string();
+            }
+
+            return {true, extracted};
         } catch (const std::exception& e) {
             std::cerr << "JWT Verification Failed: " << e.what() << std::endl;
             return {false, std::nullopt};
         }
-
-        for (const auto& claim: claims) {
-            extracted[claim] = decoded.get_payload_claim(claim).as_string();
-        }
-
-        return {true, extracted};
     }
 
     std::optional<AuthContext> JWTHandler::extractAuthContextFromCookie(const std::string_view cookie_header) {
@@ -54,9 +55,13 @@ namespace pokergame::network::auth {
                 }
 
                 if (split_cookie[0] == "jwt") {
+                    auto token = std::string(split_cookie[1]);
+                    if (!token.empty() && token.back() == ';') {
+                        token.pop_back();
+                    }
                     const auto extracted = instance()
                             .decodeAndVerify(
-                                std::string(split_cookie[1]),
+                                token,
                                 {"lobby_id", "room_id", "username"}
                             );
 

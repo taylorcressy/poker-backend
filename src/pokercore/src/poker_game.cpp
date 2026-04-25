@@ -19,14 +19,18 @@ namespace pokergame::core {
         this->community_cards.reserve(5);
     }
 
-    void PokerGame::publishGameState() {
-        events::GameStateNotification notification{
+    std::unique_ptr<events::GameStateNotification> PokerGame::getGameState() {
+        return std::make_unique<events::GameStateNotification>(
             this->state,
+            &this->config,
             this->seats,
             std::nullopt
-        };
+        );
+    }
 
-        this->notifier->sendMessageToTable(this->game_id, &notification);
+    void PokerGame::publishGameState() {
+        const auto notification = getGameState();
+        this->notifier->sendMessageToTable(this->game_id, notification.get());
     }
 
     bool PokerGame::seatPlayer(const std::string &name, const size_t seat_index) {
@@ -655,6 +659,7 @@ namespace pokergame::core {
         this->state = GameState::RoundComplete;
         events::GameStateNotification notification{
             this->state,
+            &this->config,
             this->seats,
             10
         };

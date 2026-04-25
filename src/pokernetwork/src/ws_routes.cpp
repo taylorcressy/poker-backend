@@ -8,7 +8,10 @@ namespace pokergame::network::ws {
 
     // Static member definitions
     std::unordered_map<std::string, UserSocket> WSRoutes::s_user_sockets;
+    std::unordered_map<std::string, std::unordered_map<uWS::Loop *, int>> WSRoutes::s_room_loops;
     std::shared_mutex WSRoutes::s_sockets_mutex;
+    std::unordered_map<uWS::Loop *, uWS::App *> WSRoutes::s_loop_to_app;
+    std::shared_mutex WSRoutes::s_loop_to_app_mutex;
 
     inline std::string constructUserSocketId(const auth::AuthContext *auth) {
         return auth->room_id + "-" + auth->username;
@@ -21,16 +24,39 @@ namespace pokergame::network::ws {
     WSRoutes::WSRoutes(uWS::App &app) : app(app) {
     }
 
+    void WSRoutes::registerThreadApp(uWS::App *app, uWS::Loop *loop) {
+        std::lock_guard lock(s_loop_to_app_mutex);
+        s_loop_to_app.emplace(loop, app);
+    }
+
     void WSRoutes::registerSocket(const std::string &socket_id,
+                                   const std::string &room_id,
                                    uWS::WebSocket<false, true, auth::AuthContext> *ws,
                                    uWS::Loop *loop) {
         std::lock_guard lock(s_sockets_mutex);
-        s_user_sockets.insert_or_assign(socket_id, UserSocket{ws, loop});
+        s_user_sockets.insert_or_assign(socket_id, UserSocket{ws, loop, room_id});
+        s_room_loops[room_id][loop]++;
     }
 
     void WSRoutes::unregisterSocket(const std::string &socket_id) {
         std::lock_guard lock(s_sockets_mutex);
-        s_user_sockets.erase(socket_id);
+        const auto it = s_user_sockets.find(socket_id);
+        if (it == s_user_sockets.end()) return;
+
+        const std::string &room_id = it->second.room_id;
+        uWS::Loop *loop = it->second.loop;
+        s_user_sockets.erase(it);
+
+        auto room_it = s_room_loops.find(room_id);
+        if (room_it != s_room_loops.end()) {
+            auto loop_it = room_it->second.find(loop);
+            if (loop_it != room_it->second.end() && --loop_it->second == 0) {
+                room_it->second.erase(loop_it);
+                if (room_it->second.empty()) {
+                    s_room_loops.erase(room_it);
+                }
+            }
+        }
     }
 
     void WSRoutes::playerConnected(uWS::WebSocket<false, true, auth::AuthContext> *ws,
@@ -160,10 +186,23 @@ namespace pokergame::network::ws {
         }
     }
 
-    // TODO: This is broken. We need to publish on all threads.
     void WSRoutes::sendMessageToTable(const std::string &room_id, core::events::Notification *notification) {
         const std::string channel = room_id + "-broadcast";
-        this->app.publish(channel, notification->dump(), uWS::TEXT);
+        const std::string msg = notification->dump();
+
+        std::shared_lock sockets_lock(s_sockets_mutex);
+        const auto room_it = s_room_loops.find(room_id);
+        if (room_it == s_room_loops.end()) return;
+
+        std::shared_lock apps_lock(s_loop_to_app_mutex);
+        for (const auto &[loop, _] : room_it->second) {
+            const auto app_it = s_loop_to_app.find(loop);
+            if (app_it == s_loop_to_app.end()) continue;
+            auto *app = app_it->second;
+            loop->defer([app, channel, msg] {
+                app->publish(channel, msg, uWS::TEXT);
+            });
+        }
     }
 
     uint8_t WSRoutes::sendMessageToTableWithTimeoutCallback(const std::string &room_id,

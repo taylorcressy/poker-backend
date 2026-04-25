@@ -4,7 +4,6 @@
 #include <shared_mutex>
 
 #include "auth.h"
-#include "poker_core.h"
 #include "events.h"
 
 namespace pokergame::network::ws {
@@ -12,6 +11,7 @@ namespace pokergame::network::ws {
     struct UserSocket {
         uWS::WebSocket<false, true, auth::AuthContext> *ws;
         uWS::Loop *loop;
+        std::string room_id;
     };
 
     class WSRoutes : public core::events::INotifier {
@@ -26,9 +26,13 @@ namespace pokergame::network::ws {
 
         // Called by server.cpp's open/close handlers to maintain the global socket registry
         static void registerSocket(const std::string &socket_id,
+                                   const std::string &room_id,
                                    uWS::WebSocket<false, true, auth::AuthContext> *ws,
                                    uWS::Loop *loop);
         static void unregisterSocket(const std::string &socket_id);
+
+        // Register each thread's app+loop so sendMessageToTable can publish across threads
+        static void registerThreadApp(uWS::App *app, uWS::Loop *loop);
 
         void sendMessageToPlayer(const std::string &room_id, const std::string &username,
                                  core::events::Notification *) override;
@@ -61,6 +65,12 @@ namespace pokergame::network::ws {
 
         // Global socket registry — one entry per connected player across all threads
         static std::unordered_map<std::string, UserSocket> s_user_sockets;
+        // room_id -> (loop -> ref count) — tracks which threads have subscribers for a room
+        static std::unordered_map<std::string, std::unordered_map<uWS::Loop *, int>> s_room_loops;
         static std::shared_mutex s_sockets_mutex;
+
+        // loop -> app mapping so sendMessageToTable can call app.publish on the right thread
+        static std::unordered_map<uWS::Loop *, uWS::App *> s_loop_to_app;
+        static std::shared_mutex s_loop_to_app_mutex;
     };
 }

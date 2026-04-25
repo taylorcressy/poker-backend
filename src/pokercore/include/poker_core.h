@@ -28,6 +28,8 @@ namespace pokergame::core {
             bool system_initiated);
 
         bool seatPlayer(const std::string &name, size_t seat_index);
+
+        std::unique_ptr<events::GameStateNotification> getGameState();
         // TODO: unSeatPlayer
     private:
         const types::PokerConfiguration config;
@@ -118,6 +120,8 @@ namespace pokergame::core {
         bool joinRoom(const std::string& room_id, const std::string& player_name);
 
         std::optional<events::PlayerEventAcknowledgement> sendMessageToRoom(std::string_view room_id, std::string_view username, events::PlayerEvent*);
+
+        std::unique_ptr<events::GameStateNotification> getGameState(const std::string& room_id);
 
         LeaveRoomResult leaveRoom(const std::string& room_id, const std::string& player_name);
 

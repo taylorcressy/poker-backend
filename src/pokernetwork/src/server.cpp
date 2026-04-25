@@ -34,7 +34,8 @@ namespace pokergame::network {
         for (size_t i = 0; i < number_of_cpu_threads; i++) {
             threads.emplace_back([i] {
                 auto app = uWS::App();
-                auto ws_routes = std::make_shared<ws::WSRoutes>(ws::WSRoutes(app)); {
+                auto ws_routes = std::make_shared<ws::WSRoutes>(ws::WSRoutes(app));
+                ws::WSRoutes::registerThreadApp(&app, app.getLoop()); {
                     std::lock_guard map_guard(map_mutex);
                     lobby_loops.emplace(i, LobbyLoop{core::PokerLobby{std::to_string(i)}, app.getLoop(), ws_routes});
                 }
@@ -108,10 +109,29 @@ namespace pokergame::network {
                                               .open = [ws_routes](uWS::WebSocket<false, true, auth::AuthContext> *ws) {
                                                   const auth::AuthContext *ctx = ws->getUserData();
                                                   std::cout << "Player [" << ctx->username <<
-                                                          "] connected to room [" << ctx->room_id << "]" << std::endl;
+                                                          "] connecting to room [" << ctx->room_id << "]" << std::endl;
                                                   const std::string socket_id = ctx->room_id + "-" + ctx->username;
-                                                  ws::WSRoutes::registerSocket(socket_id, ws, uWS::Loop::get());
+                                                  ws::WSRoutes::registerSocket(socket_id, ctx->room_id, ws, uWS::Loop::get());
                                                   ws_routes->playerConnected(ws, ctx);
+
+                                                  const auto room_id = ws->getUserData()->room_id;
+                                                  const auto lobby_id = ws->getUserData()->lobby_id;
+
+                                                  LobbyLoop *lobby_loop = nullptr;
+                                                  {
+                                                      std::shared_lock lock(map_mutex);
+                                                      const auto it = room_id_to_thread.find(room_id);
+                                                      if (it == room_id_to_thread.end()) {
+                                                          ws->send(R"({"type":"error","message":"room_not_found"})", uWS::TEXT);
+                                                          return;
+                                                      }
+                                                      lobby_loop = &lobby_loops.at(it->second);
+                                                  }
+
+                                                  auto notification = lobby_loop->lobby.getGameState(room_id);
+                                                  if (notification != nullptr) { // shouldn't really ever happen
+                                                      ws->send(notification->dump(), uWS::TEXT);
+                                                  }
                                               },
                                               .message = [](uWS::WebSocket<false, true, auth::AuthContext> *ws,
                                                             std::string_view message,

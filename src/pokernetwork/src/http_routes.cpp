@@ -77,7 +77,8 @@ namespace pokergame::network::http {
 
                     res->writeStatus("201 CREATED");
                     this->setCorsHeaders(res);
-                    res->writeHeader("Set-Cookie", "jwt=" + token + "; HttpOnly; SameSite=None; Path=/");
+                    res->writeHeader("Set-Cookie",
+                 "jwt=" + token + "; HttpOnly; Secure; SameSite=Strict; Path=/");
                     res->end(R"({"game_id": ")"+ room_id +"\"}");
 
                     std::cout << "Successfully created game with game id: " << room_id << std::endl;
